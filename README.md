@@ -50,6 +50,8 @@ This is an alpha foundation, not a finished DCC replacement. The procedural GLB 
 
 The implementation contract is captured in [the v0.1 specs](specs/v0.1/README.md) and the research-derived [architecture](docs/ARCHITECTURE.md). See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [PROVIDER-LICENSE-MATRIX.md](docs/PROVIDER-LICENSE-MATRIX.md) before adding a worker or provider.
 
+Read [BOOTSTRAP.md](BOOTSTRAP.md) for a clean-room setup, [IMPLEMENTATION-READINESS.md](IMPLEMENTATION-READINESS.md) for the honest current boundary, and [BACKLOG.md](BACKLOG.md) for the remaining production gates.
+
 ## License
 
 Core code and specifications are Apache-2.0. A future Blender-side package may need a separate GPL-compatible boundary; it is not silently mixed into this package. See [LICENSING.md](docs/LICENSING.md).
