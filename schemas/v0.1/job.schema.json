@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/job.schema.json",
+  "title": "Open3D Worker Job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_id", "idempotency_key", "operation", "inputs", "limits"],
+  "properties": {"schema_version": {"type": "string"}, "job_id": {"type": "string"}, "idempotency_key": {"type": "string"}, "workspace": {"type": "string"}, "checkpoint_id": {"type": "string"}, "operation": {"type": "object"}, "skill": {"type": "object"}, "inputs": {"type": "array"}, "args": {"type": "object"}, "limits": {"type": "object"}, "extensions": {"type": "object"}}
+}

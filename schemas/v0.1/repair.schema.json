@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/repair.schema.json",
+  "title": "Open3D Repair Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repair_id", "source_report", "attempt", "max_attempts", "operations", "rollback_on_failure"],
+  "properties": {"schema_version": {"type": "string"}, "repair_id": {"type": "string"}, "source_report": {"type": "string"}, "attempt": {"type": "integer", "minimum": 1}, "max_attempts": {"type": "integer", "minimum": 1}, "operations": {"type": "array"}, "preserve": {"type": "array"}, "rollback_on_failure": {"type": "boolean"}, "extensions": {"type": "object"}}
+}

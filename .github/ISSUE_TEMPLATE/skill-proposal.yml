@@ -1,0 +1,30 @@
+name: Skill proposal
+description: Propose a typed, testable Open3D skill
+title: "[Skill]: "
+labels: ["skill", "needs-design"]
+body:
+  - type: input
+    id: skill_id
+    attributes:
+      label: Skill ID
+    validations:
+      required: true
+  - type: textarea
+    id: io
+    attributes:
+      label: Typed inputs and outputs
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Required permissions
+      description: Filesystem, network, subprocess, GPU, and limits.
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: SPDX license and upstream terms
+    validations:
+      required: true

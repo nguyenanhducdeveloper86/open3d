@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1.0",
+  "asset_id": "PROP-WATERING-CAN-001",
+  "kind": "prop",
+  "units": "m",
+  "dimensions": {"width": 0.70, "depth": 0.50, "height": 0.60},
+  "parts": [
+    {"part_id": "body", "role": "body", "mutable": true},
+    {"part_id": "handle", "role": "functional", "mutable": true},
+    {"part_id": "spout", "role": "functional", "mutable": true}
+  ],
+  "geometry": {
+    "triangle_budget": {"max": 2000},
+    "primitives": [
+      {"part_id": "body", "type": "box", "size": {"x": 0.42, "y": 0.34, "z": 0.32}, "center": {"x": 0.0, "y": 0.0, "z": 0.18}, "color": "#9B6A42"},
+      {"part_id": "handle", "type": "box", "size": {"x": 0.08, "y": 0.28, "z": 0.34}, "center": {"x": 0.28, "y": 0.0, "z": 0.30}, "color": "#6C472D"},
+      {"part_id": "spout", "type": "cylinder", "axis": "x", "radius": 0.06, "depth": 0.28, "segments": 16, "center": {"x": 0.30, "y": 0.0, "z": 0.22}, "color": "#9B6A42"}
+    ]
+  },
+  "outputs": {"editable": "contract", "preview": "glb"}
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/operation.schema.json",
+  "title": "Open3D Operation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "name", "version", "input_checkpoint", "result_checkpoint"],
+  "properties": {"schema_version": {"type": "string"}, "operation_id": {"type": "string"}, "name": {"type": "string"}, "version": {"type": "string"}, "idempotency_key": {"type": "string"}, "input_checkpoint": {"type": ["string", "null"]}, "mutates": {"type": "array", "items": {"type": "string"}}, "invalidates": {"type": "array", "items": {"type": "string"}}, "result_checkpoint": {"type": ["string", "null"]}, "status": {"type": "string"}, "extensions": {"type": "object"}}
+}

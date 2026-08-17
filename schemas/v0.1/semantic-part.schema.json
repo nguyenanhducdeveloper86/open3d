@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/semantic-part.schema.json",
+  "title": "Open3D Semantic Parts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "asset_id", "parts"],
+  "properties": {"schema_version": {"type": "string"}, "asset_id": {"type": "string"}, "parts": {"type": "array", "items": {"type": "object", "required": ["part_id"], "properties": {"part_id": {"type": "string"}, "parent_part_id": {"type": ["string", "null"]}, "mutable": {"type": "boolean"}, "preserve": {"type": "array"}}}}, "extensions": {"type": "object"}}
+}

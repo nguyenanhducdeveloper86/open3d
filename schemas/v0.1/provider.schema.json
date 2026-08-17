@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/provider.schema.json",
+  "title": "Open3D Provider Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "runtime", "capabilities", "license"],
+  "properties": {"schema_version": {"type": "string"}, "id": {"type": "string"}, "version": {"type": "string"}, "runtime": {"type": "string"}, "capabilities": {"type": "object"}, "upload_required": {"type": "boolean"}, "license": {"type": "object"}, "resources": {"type": "object"}, "permissions": {"type": "object"}, "extensions": {"type": "object"}}
+}

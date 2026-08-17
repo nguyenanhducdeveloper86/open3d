@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/skill.schema.json",
+  "title": "Open3D Skill Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "entrypoint", "permissions", "license"],
+  "properties": {"schema_version": {"type": "string"}, "id": {"type": "string"}, "version": {"type": "string"}, "description": {"type": "string"}, "runtime": {"type": "object"}, "entrypoint": {"type": "string"}, "accepts": {"type": "object"}, "produces": {"type": "object"}, "capabilities": {"type": "array", "items": {"type": "string"}}, "permissions": {"type": "object"}, "resources": {"type": "object"}, "validators": {"type": "object"}, "security": {"type": "object"}, "license": {"type": ["string", "object"]}, "provenance": {"type": "object"}, "extensions": {"type": "object"}}
+}

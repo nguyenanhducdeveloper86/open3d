@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/artifact.schema.json",
+  "title": "Open3D Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_id", "kind", "bytes"],
+  "properties": {"schema_version": {"type": "string"}, "artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "kind": {"type": "string"}, "media_type": {"type": "string"}, "bytes": {"type": "integer", "minimum": 0}, "created_at": {"type": "string"}, "producer": {"type": "object"}, "inputs": {"type": "array", "items": {"type": "string"}}, "extensions": {"type": "object"}}
+}

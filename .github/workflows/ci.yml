@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install development checks
+        run: python -m pip install --disable-pip-version-check -e '.[dev]'
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Compile
+        run: python -m compileall -q open3d_artist tests
+      - name: Clean-room example
+        run: |
+          python -m open3d_artist init /tmp/open3d-clean-room --asset examples/watering-can/asset.yaml
+          python -m open3d_artist validate /tmp/open3d-clean-room
+          python -m open3d_artist export /tmp/open3d-clean-room /tmp/open3d-clean-room.glb

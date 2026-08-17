@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/event.schema.json",
+  "title": "Open3D Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "type", "timestamp", "payload"],
+  "properties": {"schema_version": {"type": "string"}, "event_id": {"type": "string"}, "job_id": {"type": "string"}, "type": {"type": "string"}, "timestamp": {"type": "string"}, "payload": {"type": "object"}, "extensions": {"type": "object"}}
+}

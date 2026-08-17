@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/checkpoint.schema.json",
+  "title": "Open3D Checkpoint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "checkpoint_id", "project_id", "ref"],
+  "properties": {"schema_version": {"type": "string"}, "checkpoint_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "project_id": {"type": "string"}, "parent_checkpoint": {"type": ["string", "null"]}, "operation_id": {"type": "string"}, "note": {"type": "string"}, "ref": {"type": "object"}, "extensions": {"type": "object"}}
+}

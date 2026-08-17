@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/qa.schema.json",
+  "title": "Open3D QA Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "report_id", "asset_id", "status", "checks"],
+  "properties": {"schema_version": {"type": "string"}, "report_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "asset_id": {"type": "string"}, "artifact_id": {"type": "string"}, "status": {"enum": ["PASS", "FAIL", "STALE"]}, "checks": {"type": "array", "items": {"type": "object", "required": ["check_id", "status"], "properties": {"check_id": {"type": "string"}, "status": {"enum": ["PASS", "FAIL"]}, "severity": {"type": "string"}, "expected": {}, "actual": {}, "affected_parts": {"type": "array"}, "repair_hint": {"type": "string"}}}}, "summary": {"type": "object"}, "extensions": {"type": "object"}}
+}

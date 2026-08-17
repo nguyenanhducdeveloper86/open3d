@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open3d.artist/schemas/v0.1/artstyle.schema.json",
+  "title": "Open3D Artstyle Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "style_id"],
+  "properties": {"schema_version": {"type": "string"}, "style_id": {"type": "string", "minLength": 1}, "geometry": {"type": "object"}, "materials": {"type": "object"}, "palette": {"type": "object"}, "camera": {"type": "object"}, "extensions": {"type": "object"}}
+}
