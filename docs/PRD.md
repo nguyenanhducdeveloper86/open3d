@@ -6,7 +6,7 @@ Clone the repository, define a small stylized prop, generate a portable GLB, ins
 
 ## Non-goals
 
-No character rigging, learned generation, marketplace, arbitrary code execution, hidden cloud upload, Unity redistribution, or desktop UI is required for this foundation release.
+Character rigging, marketplace features, arbitrary code execution, hidden cloud upload, Unity redistribution, and native installer packaging remain out of scope. The foundation release now includes a local desktop-style viewer, bounded worker adapters, and opt-in provider integration.
 
 ## Acceptance
 

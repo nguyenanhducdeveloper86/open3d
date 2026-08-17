@@ -8,7 +8,11 @@ import sys
 from pathlib import Path
 
 from .mcp import serve_stdio
+from .providers import MeshyImageTo3D, ProviderError, provider_catalog
 from .project import Project, ProjectError
+from .server import serve
+from .unity import UnityValidator
+from .workers import BlenderSandbox, WorkerError, WorkerUnavailable
 
 
 def _json(value: object) -> None:
@@ -45,6 +49,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp = commands.add_parser("mcp", help="serve the typed MCP surface over stdio")
     mcp.add_argument("project", type=Path)
+
+    http = commands.add_parser("serve", help="serve the local API and desktop viewer")
+    http.add_argument("project", type=Path)
+    http.add_argument("--host", default="127.0.0.1")
+    http.add_argument("--port", default=8289, type=int)
+    http.add_argument("--web-root", type=Path)
+
+    worker = commands.add_parser("blender-run", help="run an allowlisted Blender job")
+    worker.add_argument("project", type=Path)
+    worker.add_argument("job", type=Path, help="JSON job envelope")
+    worker.add_argument("--blender", default="blender")
+    worker.add_argument("--bwrap", default="bwrap")
+    worker.add_argument("--sandbox-exec", default="sandbox-exec")
+    worker.add_argument("--timeout", type=float, default=300)
+    worker.add_argument("--allow-unsafe", action="store_true", help="explicitly allow execution without a real OS sandbox")
+
+    unity = commands.add_parser("unity-validate", help="run the supplied Unity Editor validator")
+    unity.add_argument("unity_project", type=Path)
+    unity.add_argument("input_asset", type=Path)
+    unity.add_argument("--output", default=".open3d/unity-report.json", type=Path)
+    unity.add_argument("--unity", default="unity-editor")
+    unity.add_argument("--timeout", type=float, default=600)
+
+    commands.add_parser("providers", help="list configured provider adapters")
+
+    provider = commands.add_parser("provider-run", help="run the opt-in Meshy image-to-3D provider")
+    provider.add_argument("project", type=Path)
+    provider.add_argument("image_url")
+    provider.add_argument("--consent", action="store_true", required=True, help="confirm that the image may be uploaded to Meshy")
+    provider.add_argument("--timeout", type=float, default=900)
     return parser
 
 
@@ -56,6 +90,13 @@ def main(argv: list[str] | None = None) -> int:
             asset = args.asset if args.asset.is_absolute() else project / args.asset
             _json(Project.init(project, asset).inspect())
             return 0
+        if args.command == "providers":
+            _json(provider_catalog())
+            return 0
+        if args.command == "unity-validate":
+            value = UnityValidator(args.unity_project, unity=args.unity).run(args.input_asset, args.output, timeout=args.timeout)
+            _json(value)
+            return 0 if value["status"] == "PASS" else 1
         project = Project(args.project)
         if args.command == "inspect":
             _json(project.inspect())
@@ -72,7 +113,14 @@ def main(argv: list[str] | None = None) -> int:
             _json({"artifact": project.current()["glb_artifact"], "output": str(project.export_glb(args.output))})
         elif args.command == "mcp":
             serve_stdio(project)
+        elif args.command == "serve":
+            serve(project, host=args.host, port=args.port, web_root=args.web_root)
+        elif args.command == "blender-run":
+            job = json.loads(args.job.read_text(encoding="utf-8"))
+            _json(BlenderSandbox(project.root, blender=args.blender, bwrap=args.bwrap, sandbox_exec=args.sandbox_exec).run(job, timeout=args.timeout, allow_unsafe=args.allow_unsafe))
+        elif args.command == "provider-run":
+            _json(MeshyImageTo3D().generate(project, image_url=args.image_url, consent=args.consent, timeout=args.timeout))
         return 0
-    except (ProjectError, ValueError, OSError) as exc:
+    except (ProjectError, ProviderError, WorkerError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"open3d: {exc}", file=sys.stderr)
         return 2

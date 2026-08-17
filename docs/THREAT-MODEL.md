@@ -9,4 +9,4 @@
 | MCP client | confused deputy or arbitrary execution | typed coarse tools and no raw executor |
 | provider | unwanted upload or license violation | explicit consent, BYOK, manifest and license gate |
 
-The current core does not claim to sandbox Blender. It simply does not execute Blender code. Any future worker implementation must add the missing OS-level controls before enabling community skills.
+The bundled Blender adapter executes only three fixed operations through an OS boundary: bubblewrap on Linux or macOS `sandbox-exec` when available. It denies network, restricts writes to temporary output, caps process time/output, and refuses an unsandboxed run unless explicitly requested. Community skills and arbitrary Blender Python remain disabled.

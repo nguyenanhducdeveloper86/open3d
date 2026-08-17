@@ -7,15 +7,15 @@ This is the implementation queue derived from the research report. “Ready” m
 | Gate | Work | Status |
 |---|---|---|
 | G1 | contract parser, CAS, checkpoints, operation log | **ready**; GC/concurrency hardening remains |
-| G2 | constrained Blender launcher and worker | planned |
-| G3 | GLB viewer, semantic picking, resource disposal | planned; GLB contract ready |
+| G2 | constrained Blender launcher and worker | **adapter ready**; host sandbox hardening remains |
+| G3 | GLB viewer, semantic picking, resource disposal | **ready**; browser/desktop packaging remains |
 | G4 | deterministic geometry QA and golden fixtures | **ready** for primitive baseline; broader mesh corpus remains |
 | G5 | semantic edit, invalidation DAG, bounded repair | **partial**; scale edit/rollback ready |
 | G6 | locked six-view renderer and visual evidence | planned |
-| G7 | licensed Unity batch validator | planned |
+| G7 | licensed Unity batch validator | **adapter ready**; Unity/importer remains external |
 | G8 | MCP typed operations and conformance | **experimental**; local stdio surface ready |
-| G9 | provider SDK, consent, license gates | planned |
-| G10 | packaging, provenance, release hardening | **partial**; OSS policy/CI ready, signed binaries remain |
+| G9 | provider SDK, consent, license gates | **adapter ready**; Meshy is opt-in and remote |
+| G10 | packaging, provenance, release hardening | **ready** for wheel/web artifacts and OIDC attestations |
 
 ## P1/P2
 
@@ -28,4 +28,3 @@ UV/PBR/baking, LOD/colliders, GPU providers, Godot validation, benchmark lanes, 
 - checkpoint before mutation;
 - no raw shell/Python execution in public APIs;
 - every provider declares license, upload behavior, permissions, and resource needs.
-

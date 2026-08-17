@@ -152,6 +152,11 @@ class Project:
         current = self.current()
         return {"project": json.loads((self.root / "project.json").read_text(encoding="utf-8")), "current": current, "contract": self.load_current_asset(), "artifacts": {key: self.store.metadata_for(current[key]) for key in ("contract_artifact", "glb_artifact", "qa_artifact")}}
 
+    def history(self) -> list[dict[str, Any]]:
+        if not self.operations.is_file():
+            return []
+        return [json.loads(line) for line in self.operations.read_text(encoding="utf-8").splitlines() if line]
+
     def validate(self) -> dict[str, Any]:
         current = self.current()
         asset = self.load_current_asset()

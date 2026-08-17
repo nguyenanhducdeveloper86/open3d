@@ -1,6 +1,6 @@
 # Implementation readiness
 
-Status: **public alpha foundation**
+Status: **public alpha production slice**
 
 The repository is cloneable, licensed, tested, and has a working offline vertical slice. It is ready for public contributor feedback, not a claim that every six-month v0.1 production gate is complete.
 
@@ -12,11 +12,10 @@ The repository is cloneable, licensed, tested, and has a working offline vertica
 | GLB preview | deterministic dependency-free writer and `part_id` extras | ready |
 | Deterministic QA | stable report/check IDs and blocking checks | ready |
 | MCP | typed stdio inspect/validate/edit/rollback surface | experimental |
-| Blender | launch/security boundary documented, worker not bundled | planned |
-| Viewer | GLB contract documented, desktop viewer not bundled | planned |
-| Unity | import policy documented, licensed validator not bundled | planned |
-| Providers | license matrix and optional boundary documented | planned |
-| Release signing/SBOM | policy documented, source-only alpha | planned |
+| Blender | allowlisted standalone worker, watchdog, output cap, bubblewrap/macOS sandbox policy | adapter ready; host sandbox still required on unsupported OS |
+| Viewer | local API, Three.js GLB viewer, semantic picking, edit/QA/history/provider views | ready |
+| Unity | batch validator source adapter and bounded command builder | adapter ready; licensed Editor/importer required |
+| Providers | procedural catalog and opt-in Meshy image-to-3D adapter with consent/polling/GLB verification | adapter ready; key required |
+| Release signing/SBOM | tag workflow, checksums, CycloneDX inventory, OIDC provenance attestation | ready on tagged CI release |
 
 The research report's large G2–G10 backlog remains intentionally visible in [BACKLOG.md](BACKLOG.md). The first public milestone is the deterministic baseline; no AI provider is allowed to hide a core pipeline defect.
-
