@@ -20,6 +20,6 @@ jobs:
         run: python -m compileall -q open3d_artist tests
       - name: Clean-room example
         run: |
-          python -m open3d_artist init /tmp/open3d-clean-room --asset examples/watering-can/asset.yaml
+          python -m open3d_artist init /tmp/open3d-clean-room --asset "$GITHUB_WORKSPACE/examples/watering-can/asset.yaml"
           python -m open3d_artist validate /tmp/open3d-clean-room
           python -m open3d_artist export /tmp/open3d-clean-room /tmp/open3d-clean-room.glb
