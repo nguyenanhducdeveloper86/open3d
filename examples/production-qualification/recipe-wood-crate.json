@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "recipe_id": "production-qualification-wood-crate-v1",
+  "prompt": "A compact warm wooden shipping crate with four corner posts and a slatted lid; clean representative production prop.",
+  "reference": {"path": "reference-wood-crate.svg", "kind": "checked-in-local-reference", "sha256": "ecbd2aade78064cf53f5d1756556a2426c06034db52322dafef0e228e8c57016"},
+  "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"],
+  "asset": {
+    "schema_version": "0.1.0", "asset_id": "PROP-WOOD-CRATE-001", "kind": "prop", "units": "m",
+    "dimensions": {"width": 1.02, "depth": 0.82, "height": 0.775},
+    "parts": [{"part_id": "box", "role": "body", "mutable": true}, {"part_id": "posts", "role": "structural", "mutable": true}, {"part_id": "lid", "role": "structural", "mutable": true}],
+    "geometry": {"triangle_budget": {"max": 2000}, "primitives": [
+      {"part_id": "box", "type": "box", "size": {"x": 0.9, "y": 0.7, "z": 0.55}, "center": {"x": 0, "y": 0, "z": 0.32}, "color": "#A86735"},
+      {"part_id": "posts", "type": "box", "size": {"x": 1.02, "y": 0.82, "z": 0.12}, "center": {"x": 0, "y": 0, "z": 0.68}, "color": "#D08A48"},
+      {"part_id": "lid", "type": "box", "size": {"x": 0.92, "y": 0.72, "z": 0.10}, "center": {"x": 0, "y": 0, "z": 0.77}, "color": "#8B4E29"}
+    ]},
+    "outputs": {"editable": "contract", "preview": "glb"}
+  }
+}

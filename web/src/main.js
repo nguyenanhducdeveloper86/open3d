@@ -9,6 +9,7 @@ const state = {
   report: null,
   history: [],
   providers: [],
+  production: null,
   activeView: "workspace",
   selectedPart: null,
   query: "",
@@ -72,11 +73,12 @@ async function api(path, options = {}) {
 
 async function loadState() {
   try {
-    const [inspect, report, history, providers] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers")]);
+    const [inspect, report, history, providers, production] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers"), api("/api/production/state")]);
     state.inspect = inspect;
     state.report = report;
     state.history = history;
     state.providers = providers;
+    state.production = production;
     state.selectedPart = inspect.contract.parts[0]?.part_id || null;
     hydrateHeader();
     renderView();
@@ -145,6 +147,10 @@ function selectedPartMarkup() {
 function renderQa() {
   const checks = state.report?.checks || [];
   viewRoot.innerHTML = `<div class="detail-view"><div class="detail-toolbar"><div><div class="eyebrow">DETERMINISTIC QA</div><h2>Quality gate</h2><p>Stable checks run against the current contract and GLB artifact.</p></div><button class="primary-action compact" id="rerun-qa"><i class="ph ph-arrow-clockwise"></i>Run again</button></div><div class="qa-layout"><section class="qa-summary"><div class="qa-score ${state.report.status.toLowerCase()}"><span>${state.report.status === "PASS" ? "100" : "!"}</span><small>GATE STATUS</small></div><div class="qa-metrics"><div><small>CHECKS</small><b>${checks.length}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div><div><small>ARTIFACT</small><b>${state.inspect.current.glb_artifact.slice(7, 15)}</b></div></div></section><section class="check-list">${checks.map((check) => `<div class="check-row"><span class="check-icon ${check.status.toLowerCase()}"><i class="ph ${check.status === "PASS" ? "ph-check" : check.status === "WARN" ? "ph-warning" : "ph-x"}"></i></span><div><b>${escapeHtml(check.check_id)}</b><p>${escapeHtml(check.message)}</p></div><span class="check-status ${check.status.toLowerCase()}">${escapeHtml(check.status)}</span></div>`).join("")}</section></div></div>`;
+  const production = state.production || {}, renders = production.renders || {};
+  const cards = ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"].map((view) => renders[view] ? `<figure class="render-card"><img src="${escapeHtml(renders[view])}" alt="${view} render"><figcaption>${view}</figcaption></figure>` : `<div class="render-card unavailable"><span>${view}</span><small>UNAVAILABLE</small></div>`).join("");
+  const adapters = Object.entries(production.adapters || {}).map(([name, value]) => `<span>${escapeHtml(name)}: ${escapeHtml(value)}</span>`).join("") || "No adapter receipt";
+  viewRoot.querySelector(".detail-view").insertAdjacentHTML("beforeend", `<section class="release-proof"><div class="section-heading"><span>PRODUCTION RELEASE</span><span>${escapeHtml(production.promotion?.state || "UNAVAILABLE")}</span></div><p>Receipt: ${escapeHtml(production.receipt?.brief?.id || "UNAVAILABLE")}</p><p>Release proof: ${escapeHtml(production.release_verification?.status || "UNAVAILABLE")} · approval remains ${escapeHtml(production.release?.approval || "UNAVAILABLE")}</p><div class="adapter-tags">${adapters}</div><div class="render-grid">${cards}</div></section>`);
   document.querySelector("#rerun-qa").addEventListener("click", runQa);
 }
 

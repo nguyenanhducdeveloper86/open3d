@@ -1,0 +1,70 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T004",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "T003 is genuinely green: the fixture emits deterministic .blend/.glb artifacts, six renders, CAS references, geometry QA, provenance, and truthful LOCAL_ONLY_NOT_APPROVED status. It remains a script-only workflow with no production-run contract, CLI/API/MCP entrypoint, promotion receipt, or viewer smoke proof. Approve one cohesive local-only orchestration slice reusing the fixture, sandbox boundary, CAS, and existing viewer. External QA, Unity, providers, signing, and public release remain deferred.",
+    "evidence": [
+      "docs/goals/production-asset-agents/notes/T003-receipt.json",
+      "tools/production_fixture/generate_fixture.py",
+      "examples/production-qualification/recipe.json",
+      "/tmp/open3d-production-qualification/qa.json",
+      "/tmp/open3d-production-qualification/evidence.json",
+      "open3d_artist/cli.py",
+      "open3d_artist/server.py",
+      "open3d_artist/mcp.py",
+      "python3 -m unittest -v tests.test_production_fixture passed"
+    ],
+    "worker_package": {
+      "objective": "Implement one local production-run contract that validates prompt/reference metadata and six required views, invokes the existing deterministic fixture through a fixed network-denied Blender subprocess, emits explicit run and promotion state without false approval, and exposes the same operation through the CLI, HTTP API, and typed MCP surface for Codex and Claude Code. Add a smoke test proving the generated project validates, serves its current GLB/QA, and reaches the existing viewer route.",
+      "allowed_files": [
+        "open3d_artist/production.py",
+        "open3d_artist/workers.py",
+        "open3d_artist/cli.py",
+        "open3d_artist/server.py",
+        "open3d_artist/mcp.py",
+        "tests/test_production_run.py"
+      ],
+      "verify": [
+        "python3 -m unittest -v tests.test_production_fixture tests.test_production_run",
+        "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --recipe examples/production-qualification/recipe.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\"",
+        "npm run build --prefix web",
+        "python3 -m compileall -q open3d_artist tests"
+      ],
+      "stop_if": [
+        "Any required product change falls outside allowed_files.",
+        "The runner requires network access, provider credentials, Unity, Meshy, All2API, arbitrary shell/Python execution, or an unsandboxed fallback.",
+        "The CLI, HTTP, or MCP path accepts arbitrary filesystem or command execution instead of a fixed recipe contract.",
+        "Promotion state could claim APPROVED without external visual QA and Unity evidence.",
+        "The generated run cannot expose validation, current GLB, promotion state, and viewer-serving proof.",
+        "Verification fails twice without a clear local fix."
+      ]
+    },
+    "subgoal_contract": null,
+    "parallel_safety": {
+      "safe": true,
+      "reason": "T004 is the only active task and the selected package is the sole write-capable follow-up."
+    },
+    "blocked_tasks": [],
+    "missing_evidence": [
+      "No production-run CLI, HTTP, or MCP operation exists.",
+      "No run receipt or promotion-state artifact exists.",
+      "No viewer-load smoke proof exists for the generated qualification project.",
+      "No Codex or Claude Code production receipt exists.",
+      "External visual QA, Unity validation, provider integration, signed release metadata, and public approval remain unavailable or unproven."
+    ],
+    "deferred_work": [
+      "Expand beyond the representative lantern fixture.",
+      "Add external visual QA, bounded repair, Unity validation, and provider integrations.",
+      "Add browser-level viewer proof and promotion UI.",
+      "Connect signed release metadata and actual Codex/Claude client configuration."
+    ],
+    "required_board_updates": [
+      "Create and activate the next Worker task with worker_package copied verbatim.",
+      "Keep the goal active and T999 queued.",
+      "Do not mark the goal complete after this package."
+    ]
+  }
+}

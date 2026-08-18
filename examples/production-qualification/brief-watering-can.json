@@ -1,0 +1,6 @@
+{
+  "schema_version": "0.1.0", "brief_id": "qualification-watering-can-local-v1",
+  "prompt": "A simple teal metal watering can with a round body, top handle, and angled spout; clean representative production prop.",
+  "reference": {"path": "reference-watering-can.svg", "kind": "checked-in-local-reference", "sha256": "bfb6e59f535f0ec5a2ee9a929729178b7a408ba3779e638252bd9750f9320480"},
+  "recipe_id": "production-qualification-watering-can-v1", "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"]
+}

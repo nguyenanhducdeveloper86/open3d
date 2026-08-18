@@ -1,0 +1,816 @@
+version: 2
+
+goal:
+  title: "Open3D production asset agents"
+  slug: "production-asset-agents"
+  kind: open_ended
+  tranche: "Discover and complete successive safe verified slices until Open3D demonstrates the full production asset oracle."
+  status: active
+  oracle:
+    signal: "A checked-in fixture runs from prompt/reference through Blender generation, six-view QA, approval, viewer load, and signed artifact metadata, with Codex and Claude Code agent receipts."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Passing end-to-end fixture commands, generated artifact/evidence files, viewer load check, agent adapter receipts, and final PM/Judge audit."
+  intake:
+    original_request: "Open3D must generate high-quality production assets like xFarm and integrate Codex/Claude Code agents like OpenDesign."
+    interpreted_outcome: "Open3D becomes a production asset pipeline, not only a viewer: prompt/reference planning, deterministic Blender generation, multi-view QA, controlled repair, promotion, and agent access."
+    input_shape: open_ended
+    audience: "Open3D asset-production operator"
+    authority: requested
+    proof_type: artifact
+    completion_proof: "A reproducible fixture produces approved .blend/.glb assets, six renders, QA/provenance evidence, viewer output, and agent receipts from the documented CLI/API."
+    likely_misfire: "Implementing only a natural-language command box or a one-shot provider call without xFarm-style deterministic recipes, QA, evidence, and promotion."
+    blind_spots_considered:
+      - "Blender runtime and sandbox policy"
+      - "External xFarm path and recipe compatibility"
+      - "AI provider credentials, cost, and reproducibility"
+      - "Codex and Claude Code CLI availability and permissions"
+      - "Multi-view visual QA and bounded repair"
+      - "Artifact promotion, provenance, and signed release trust"
+    existing_plan_facts:
+      - "Retain the current Blender sandbox, Unity validator, desktop viewer, AI-provider adapters, and signed-release workflow."
+      - "Use /Users/ducna/Desktop/xFarm as the production workflow reference."
+      - "Keep the GSAP dark design system and implementation simple."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  commit_and_push_after_worker: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: unknown
+  worker: unknown
+  judge: unknown
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/production-asset-agents/"
+    command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
+
+active_task: T012
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: low
+    objective: "Map Open3D and xFarm production workflows, runtime availability, current verification, and the smallest end-to-end gaps that must be closed first."
+    inputs:
+      - "README.md"
+      - "open3d_artist/"
+      - "web/"
+      - "tests/"
+      - "/Users/ducna/Desktop/xFarm/README.md"
+      - "/Users/ducna/Desktop/xFarm/skills/cloudvale-asset-generation/SKILL.md"
+    constraints:
+      - "Read-only; do not edit product files."
+      - "Use concrete file-path evidence and runnable verification commands."
+      - "Separate what exists from what is assumed."
+    expected_output:
+      - "Repo and xFarm workflow map"
+      - "Runtime and credential prerequisites"
+      - "Current oracle blockers"
+      - "Ranked next Worker package"
+    receipt:
+      result: done
+      summary: "Open3D has a passing deterministic procedural GLB core, local viewer, bounded Blender adapter, QA/contracts, and opt-in Meshy provider. xFarm demonstrates the missing production loop: deterministic Blender masters, six tagged views, independent reference generation, fresh visual QA, bounded repair, evidence manifests, and agent skill conventions. Blender 5.2, Node, Claude Code, and Codex are locally available; macOS sandbox-exec exists, but Unity, bubblewrap, Meshy credentials, and All2API bridge were not found. The highest-leverage slice is a checked-in six-asset Blender qualification fixture with six-view renders, QA/evidence manifests, and Open3D import/verification."
+      evidence:
+        - "README.md: Open3D currently ships contracts, CAS, deterministic primitive-to-GLB export, geometry QA, viewer, Blender/Unity adapters, and optional Meshy."
+        - "docs/ARCHITECTURE.md: filesystem is source of truth; current generator is dependency-free procedural baseline; MCP exposes inspect/validate/edit/rollback."
+        - "README.md Quick start: `python -m unittest discover -s tests -v`, CLI init/validate/inspect/edit/export, viewer build, and serve commands."
+        - "tests: `python3 -m unittest discover -s tests -v` passed 5 tests with 1 optional JSON-schema test skipped."
+        - "examples/watering-can: `python3 -m open3d_artist validate examples/watering-can` passed GLB, identity, triangle, finite, non-degenerate, and dimensions checks."
+        - "workers/blender/README.md and open3d_artist/workers.py: allowlisted inspect/validate/export_glb worker; requires real sandbox unless explicitly unsafe."
+        - "/Users/ducna/Desktop/xFarm/skills/cloudvale-asset-generation/SKILL.md: mandatory fetch-before-touch, deterministic Blender master, six views HERO_3Q/FRONT/BACK/LEFT/RIGHT/TOP, reference-first Gemini QA, evidence manifests, bounded repair, and truthful approval states."
+        - "/Users/ducna/Desktop/xFarm/tools/generate_cloudvale_qualification_assets.py: concrete six-asset Blender generator with fixed palette, collections, sockets, collision, rigs, GLB/export/render workflow."
+        - "/Users/ducna/Desktop/xFarm/AssetsProduction/REG-SHELL-CARE-001/reference_manifest.json: required six-view candidate mapping and explicit reference/QC state."
+        - "/Users/ducna/Desktop/xFarm/AssetsProduction/REG-SHELL-CARE-001/qa/REG-SHELL-CARE-001_qa_v001_report.json: structured dimensions, exports, local checks, geometry/material renders, external QC, and next state."
+        - "Local probes: Blender 5.2.0 LTS, Python 3.14.3, Node 26.4.0, npm 11.17.0, Claude Code 2.1.196, Codex CLI 0.147.0, `/usr/bin/sandbox-exec`; Unity and bwrap absent."
+        - "`python3 -m open3d_artist providers`: procedural configured; Meshy not configured and requires consent. Environment exposes NVIDIA_API_KEY only; no MESHY_API_KEY or All2API bridge evidence."
+      facts:
+        - "Open3D's current oracle is not yet satisfied: no checked-in Blender qualification fixture, six-view QA pipeline, visual evidence package, or Codex/Claude production receipts."
+        - "xFarm's agent convention is a skill package with SKILL.md, references, and agents/openai.yaml; its repository is coordination source of truth."
+        - "xFarm explicitly preserves REPAIR/UNAVAILABLE outcomes and forbids fabricating provider or Unity approval."
+      contradictions:
+        - "The Open3D goal oracle requires prompt/reference-to-Blender flow, but current Open3D exposes only procedural generation plus Meshy image-to-3D; no reference manifest or deterministic recipe contract is implemented."
+        - "Open3D documentation says Blender is optional and sandboxed; Blender is installed locally, but no production recipe runner or qualification validator exists in this repository."
+        - "The goal board lists xFarm skill input, while the current Open3D tree has no corresponding skill package."
+      ambiguity_requiring_judge:
+        - "Whether the first Worker should port xFarm's six qualification generator directly or implement a smaller Open3D-native recipe/evidence contract around one representative asset before expanding to six."
+      commands:
+        - "sed/rg targeted inspection of Open3D and xFarm architecture, skills, generators, manifests, QA, and agent configuration"
+        - "python3 -m unittest discover -s tests -v"
+        - "python3 -m open3d_artist validate examples/watering-can"
+        - "python3 -m open3d_artist providers"
+        - "command -v/version probes for python3, node, npm, blender, claude, codex, sandbox-exec, bwrap, unity"
+      spawned_tasks:
+        - T002
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review Scout findings and choose the largest safe vertical implementation slice toward the production asset oracle."
+    inputs:
+      - "T001 receipt"
+    constraints:
+      - "Read-only; do not implement."
+      - "Choose exact allowed_files, verify commands, and stop conditions."
+      - "Do not approve a chat-only or provider-only slice as sufficient."
+    expected_output:
+      - "Decision and rationale"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Blocked or deferred work"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "Approve one Open3D-native representative-asset fixture rather than porting xFarm wholesale. It exercises the real oracle boundary locally—deterministic Blender generation, .blend/.glb output, six tagged renders, machine-readable evidence/QA, and existing Open3D validation—without Unity, providers, credentials, or external APIs. The slice is substantial, bounded, reversible, and establishes the contract needed before expanding to multiple assets or agent integrations. External checks must be recorded as unavailable, never passed."
+      evidence:
+        - docs/goals/production-asset-agents/notes/T001-receipt.json
+        - "T001 verified Blender 5.2, existing Open3D validation, and passing repository tests."
+        - "goal.md requires a reproducible prompt/reference-to-Blender fixture with six renders, QA/provenance evidence, and Open3D verification."
+      worker_package:
+        objective: "Create one checked-in prompt-plus-local-reference production qualification fixture for a representative asset. Run Blender deterministically from a recipe, emit .blend/.glb, six tagged PNG renders, machine-readable provenance/evidence and truthful local QA, then verify the GLB with the existing Open3D validator."
+        allowed_files:
+          - tools/production_fixture/generate_fixture.py
+          - examples/production-qualification/recipe.json
+          - examples/production-qualification/reference.svg
+          - tests/test_production_fixture.py
+        verify:
+          - "blender --background --factory-startup --python tools/production_fixture/generate_fixture.py -- --recipe examples/production-qualification/recipe.json --output /tmp/open3d-production-qualification"
+          - "python3 -m open3d_artist validate /tmp/open3d-production-qualification"
+          - "python3 -m unittest -v tests.test_production_fixture"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Blender generation requires network access, provider credentials, Unity, Meshy, All2API, or non-deterministic external inference."
+          - "The fixture cannot produce all six named views and machine-readable evidence/QA."
+          - "Existing Open3D validation requires product changes outside this package."
+          - "Verification fails twice without a clear local fix."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "Only T003 is write-capable; no concurrent Worker scope exists."
+      blocked_tasks: []
+      missing_evidence:
+        - "The checked-in fixture and exact recipe contract do not yet exist."
+        - "External visual QA, Unity validation, provider integration, and agent receipts remain unproven."
+      deferred_work:
+        - "Expand from one representative asset to the xFarm-style six-asset catalog."
+        - "Add reference-first external visual QA, bounded repair, Meshy/All2API integration, and Unity validation."
+        - "Add Codex/Claude adapters or skills, viewer-load proof, promotion, signing, and release metadata."
+      required_board_updates:
+        - "Copy worker_package verbatim to T003, activate T003, and preserve one active task."
+        - "Do not mark the goal complete after T003; continue toward the remaining oracle evidence."
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Create one checked-in prompt-plus-local-reference production qualification fixture for a representative asset. Run Blender deterministically from a recipe, emit .blend/.glb, six tagged PNG renders, machine-readable provenance/evidence and truthful local QA, then verify the GLB with the existing Open3D validator."
+    allowed_files:
+      - "tools/production_fixture/generate_fixture.py"
+      - "examples/production-qualification/recipe.json"
+      - "examples/production-qualification/reference.svg"
+      - "tests/test_production_fixture.py"
+    verify:
+      - "blender --background --factory-startup --python tools/production_fixture/generate_fixture.py -- --recipe examples/production-qualification/recipe.json --output /tmp/open3d-production-qualification"
+      - "python3 -m open3d_artist validate /tmp/open3d-production-qualification"
+      - "python3 -m unittest -v tests.test_production_fixture"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Any required change falls outside allowed_files."
+      - "Blender generation requires network access, provider credentials, Unity, Meshy, All2API, or non-deterministic external inference."
+      - "The fixture cannot produce all six named views and machine-readable evidence/QA."
+      - "Existing Open3D validation requires product changes outside this package."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - tools/production_fixture/generate_fixture.py
+        - examples/production-qualification/recipe.json
+        - examples/production-qualification/reference.svg
+        - tests/test_production_fixture.py
+      commands:
+        - cmd: "blender --background --factory-startup --python tools/production_fixture/generate_fixture.py -- --recipe examples/production-qualification/recipe.json --output /tmp/open3d-production-qualification"
+          status: pass
+        - cmd: "python3 -m open3d_artist validate /tmp/open3d-production-qualification"
+          status: pass
+        - cmd: "python3 -m unittest -v tests.test_production_fixture"
+          status: pass
+      summary: "Added deterministic local lantern qualification fixture with prompt/reference metadata, Blender .blend generation, Open3D-compatible .glb, six tagged renders, provenance/evidence, truthful unavailable external QA, and temporary-output tests."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T004
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review the verified production fixture and select the next largest safe vertical slice toward prompt/reference orchestration, agent access, QA/promotion, and viewer/release proof."
+    inputs:
+      - "T001 scout receipt"
+      - "T002 judge receipt"
+      - "T003 worker receipt"
+      - "Generated fixture output and current diff"
+    constraints:
+      - "Read-only; do not implement."
+      - "Choose one bounded Worker package with exact allowed_files, verify commands, and stop conditions."
+      - "Keep external providers and missing Unity explicitly unavailable rather than faking approval."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T003 is genuinely green: the fixture emits deterministic .blend/.glb artifacts, six renders, CAS references, geometry QA, provenance, and truthful LOCAL_ONLY_NOT_APPROVED status. It remains a script-only workflow with no production-run contract, CLI/API/MCP entrypoint, promotion receipt, or viewer smoke proof. Approve one cohesive local-only orchestration slice reusing the fixture, sandbox boundary, CAS, and existing viewer. External QA, Unity, providers, signing, and public release remain deferred."
+      evidence:
+        - docs/goals/production-asset-agents/notes/T003-receipt.json
+        - tools/production_fixture/generate_fixture.py
+        - examples/production-qualification/recipe.json
+        - /tmp/open3d-production-qualification/qa.json
+        - /tmp/open3d-production-qualification/evidence.json
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - "python3 -m unittest -v tests.test_production_fixture passed"
+      worker_package:
+        objective: "Implement one local production-run contract that validates prompt/reference metadata and six required views, invokes the existing deterministic fixture through a fixed network-denied Blender subprocess, emits explicit run and promotion state without false approval, and exposes the same operation through the CLI, HTTP API, and typed MCP surface for Codex and Claude Code. Add a smoke test proving the generated project validates, serves its current GLB/QA, and reaches the existing viewer route."
+        allowed_files:
+          - open3d_artist/production.py
+          - open3d_artist/workers.py
+          - open3d_artist/cli.py
+          - open3d_artist/server.py
+          - open3d_artist/mcp.py
+          - tests/test_production_run.py
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+          - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --recipe examples/production-qualification/recipe.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\""
+          - "npm run build --prefix web"
+          - "python3 -m compileall -q open3d_artist tests"
+        stop_if:
+          - "Any required product change falls outside allowed_files."
+          - "The runner requires network access, provider credentials, Unity, Meshy, All2API, arbitrary shell/Python execution, or an unsandboxed fallback."
+          - "The CLI, HTTP, or MCP path accepts arbitrary filesystem or command execution instead of a fixed recipe contract."
+          - "Promotion state could claim APPROVED without external visual QA and Unity evidence."
+          - "The generated run cannot expose validation, current GLB, promotion state, and viewer-serving proof."
+          - "Verification fails twice without a clear local fix."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "T004 is the only active task and the selected package is the sole write-capable follow-up."
+      blocked_tasks: []
+      missing_evidence:
+        - "No production-run CLI, HTTP, or MCP operation exists."
+        - "No run receipt or promotion-state artifact exists."
+        - "No viewer-load smoke proof exists for the generated qualification project."
+        - "No Codex or Claude Code production receipt exists."
+        - "External visual QA, Unity validation, provider integration, signed release metadata, and public approval remain unavailable or unproven."
+      deferred_work:
+        - "Expand beyond the representative lantern fixture."
+        - "Add external visual QA, bounded repair, Unity validation, and provider integrations."
+        - "Add browser-level viewer proof and promotion UI."
+        - "Connect signed release metadata and actual Codex/Claude client configuration."
+      required_board_updates:
+        - "Create and activate the next Worker task with worker_package copied verbatim."
+        - "Keep the goal active and T999 queued."
+        - "Do not mark the goal complete after this package."
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement one local production-run contract that validates prompt/reference metadata and six required views, invokes the existing deterministic fixture through a fixed network-denied Blender subprocess, emits explicit run and promotion state without false approval, and exposes the same operation through the CLI, HTTP API, and typed MCP surface for Codex and Claude Code. Add a smoke test proving the generated project validates, serves its current GLB/QA, and reaches the existing viewer route."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "open3d_artist/workers.py"
+      - "open3d_artist/cli.py"
+      - "open3d_artist/server.py"
+      - "open3d_artist/mcp.py"
+      - "tests/test_production_run.py"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+      - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --recipe examples/production-qualification/recipe.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\""
+      - "npm run build --prefix web"
+      - "python3 -m compileall -q open3d_artist tests"
+    stop_if:
+      - "Any required product change falls outside allowed_files."
+      - "The runner requires network access, provider credentials, Unity, Meshy, All2API, arbitrary shell/Python execution, or an unsandboxed fallback."
+      - "The CLI, HTTP, or MCP path accepts arbitrary filesystem or command execution instead of a fixed recipe contract."
+      - "Promotion state could claim APPROVED without external visual QA and Unity evidence."
+      - "The generated run cannot expose validation, current GLB, promotion state, and viewer-serving proof."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - open3d_artist/workers.py
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - tests/test_production_run.py
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+          status: pass
+        - cmd: "production-run ... && validate ..."
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+      summary: "Implemented fixed sandboxed production runs with recipe/view validation, truthful promotion state, run receipts, CLI/HTTP/MCP access, and viewer/artifact smoke coverage."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T006
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review the production-run contract and select the next largest safe package for agent adapters/skills, provider-aware QA, artifact promotion, viewer proof, and signed release."
+    inputs:
+      - "T001 through T005 receipts"
+      - "Current implementation and full verification"
+      - "Open3D and xFarm agent conventions"
+    constraints:
+      - "Read-only; do not implement."
+      - "Choose one coherent package with exact allowed_files, verify commands, and stop conditions."
+      - "Do not claim external visual QA, Unity, provider, or signed approval without evidence."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T005 proves the local runner but not the operator-facing agent boundary: inputs remain recipe-only, selection is not an explicit brief-to-allowlist protocol, and the Codex/Claude skill contract is absent. Approve one vertical protocol slice over the existing sandboxed runner. It must preserve truthful local QA, unavailable external gates, and LOCAL_ONLY_NOT_APPROVED promotion."
+      evidence:
+        - "T005 receipt: fixed sandboxed CLI/HTTP/MCP production run passes."
+        - "open3d_artist/production.py: fixed recipe path and no structured brief registry."
+        - "open3d_artist/cli.py, server.py, mcp.py: recipe-oriented invocation surfaces."
+        - "specs/v0.1/skill-protocol.md: typed inputs, outputs, limits, validators, license, and provenance are required."
+        - "xFarm SKILL.md and agents/openai.yaml: established skill/agent convention."
+        - "Current verification passed: production fixture/run tests, web build, and compileall."
+      worker_package:
+        objective: "Implement a harness-neutral Open3D production-agent protocol: accept a structured asset brief, resolve only an explicit checked-in recipe ID, invoke the existing network-denied Blender runner, and return a stable agent receipt containing brief identity, selected recipe, six-view/local QA, artifact refs, sandbox/network facts, unavailable external gates, and truthful promotion state. Expose the same brief contract through CLI, HTTP, and typed MCP, and document Codex/Claude Code invocation in an installable skill package."
+        allowed_files:
+          - open3d_artist/production.py
+          - open3d_artist/cli.py
+          - open3d_artist/server.py
+          - open3d_artist/mcp.py
+          - tests/test_production_run.py
+          - examples/production-qualification/brief.json
+          - skills/open3d-production-asset/SKILL.md
+          - skills/open3d-production-asset/agents/openai.yaml
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+          - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\""
+          - "npm run build --prefix web"
+          - "python3 -m compileall -q open3d_artist tests"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Brief input permits arbitrary recipe paths, shell/Python execution, network access, provider calls, or unbounded filesystem access."
+          - "Recipe selection is not restricted to checked-in allowlisted recipe IDs."
+          - "CLI, HTTP, and MCP do not produce equivalent receipt semantics."
+          - "The protocol claims Codex or Claude execution without a locally verifiable invocation result."
+          - "External visual QA, Unity, Meshy, All2API, signing, or approval can appear PASS/APPROVED without evidence."
+          - "Verification fails twice without a clear local fix."
+      deferred_work:
+        - "External visual QA, bounded repair, Meshy/All2API integration, and Unity validation."
+        - "Signed artifact metadata, public approval, and release publication."
+        - "Browser-level viewer proof and expansion beyond the representative fixture."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "T006 is read-only and no other write-capable Worker is active."
+      blocked_tasks: []
+      missing_evidence:
+        - "Structured brief and bounded recipe-selection protocol do not yet exist."
+        - "Codex/Claude skill package and agent-facing receipt contract do not yet exist."
+        - "Full oracle remains unproven for external visual QA, Unity, signed metadata, and final approval."
+      required_board_updates:
+        - "PM should copy worker_package verbatim to the next free Worker task and activate it."
+        - "Keep the goal active and T999 queued; do not claim completion after this slice."
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement a harness-neutral Open3D production-agent protocol: accept a structured asset brief, resolve only an explicit checked-in recipe ID, invoke the existing network-denied Blender runner, and return a stable agent receipt containing brief identity, selected recipe, six-view/local QA, artifact refs, sandbox/network facts, unavailable external gates, and truthful promotion state. Expose the same brief contract through CLI, HTTP, and typed MCP, and document Codex/Claude Code invocation in an installable skill package."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "open3d_artist/cli.py"
+      - "open3d_artist/server.py"
+      - "open3d_artist/mcp.py"
+      - "tests/test_production_run.py"
+      - "examples/production-qualification/brief.json"
+      - "skills/open3d-production-asset/SKILL.md"
+      - "skills/open3d-production-asset/agents/openai.yaml"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+      - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\""
+      - "npm run build --prefix web"
+      - "python3 -m compileall -q open3d_artist tests"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "Brief input permits arbitrary recipe paths, shell/Python execution, network access, provider calls, or unbounded filesystem access."
+      - "Recipe selection is not restricted to checked-in allowlisted recipe IDs."
+      - "CLI, HTTP, and MCP do not produce equivalent receipt semantics."
+      - "The protocol claims Codex or Claude execution without a locally verifiable invocation result."
+      - "External visual QA, Unity, Meshy, All2API, signing, or approval can appear PASS/APPROVED without evidence."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - tests/test_production_run.py
+        - examples/production-qualification/brief.json
+        - skills/open3d-production-asset/SKILL.md
+        - skills/open3d-production-asset/agents/openai.yaml
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run"
+          status: pass
+        - cmd: "production-run brief and validate"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+      summary: "Implemented strict brief validation, checked-in recipe registry, sandboxed production receipts, equivalent CLI/HTTP/MCP contracts, negative injection tests, and Codex/Claude skill documentation. External gates remain unavailable and promotion stays LOCAL_ONLY_NOT_APPROVED."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T008
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit the new agent protocol and select the next largest safe package for real artifact promotion, provider/visual QA adapters, viewer proof, and signed production release."
+    inputs:
+      - "T001 through T007 receipts"
+      - "Current implementation and full diff"
+      - "xFarm production quality gates"
+    constraints:
+      - "Read-only; do not implement."
+      - "Use the end-to-end oracle, not only unit tests, to choose the next slice."
+      - "Keep unavailable external services truthful and scoped."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T007 proves the bounded generation protocol, but generated runs are not promoted into a destination project's current ref, the viewer does not consume production receipts or renders, and release signing is only package-level CI metadata. Approve one cohesive local release-handoff slice: reversible promotion, normalized unavailable adapter states, viewer evidence display, and optional locally verifiable signing. Keep Meshy, All2API, Unity, and external visual QA unavailable unless independently configured."
+      evidence:
+        - docs/goals/production-asset-agents/notes/T007-receipt.json
+        - open3d_artist/production.py
+        - open3d_artist/project.py
+        - open3d_artist/server.py
+        - web/src/main.js
+        - scripts/build_release.py
+        - .github/workflows/release.yml
+      worker_package:
+        objective: "Implement one local production-release handoff: promote a verified generated run into a destination Project current ref with immutable artifact copies and reversible checkpointing; persist run receipt, six renders, provenance, QA, promotion, adapter availability, and release metadata; expose promotion/release verification through CLI, HTTP, and typed MCP; and update the desktop viewer to show the receipt, six renders, adapter states, release proof, and truthful promotion state."
+        allowed_files:
+          - open3d_artist/production.py
+          - open3d_artist/project.py
+          - open3d_artist/cli.py
+          - open3d_artist/server.py
+          - open3d_artist/mcp.py
+          - skills/open3d-production-asset/SKILL.md
+          - tests/test_production_release.py
+          - web/src/main.js
+          - web/src/styles.css
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release"
+          - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist validate \"$project_dir\""
+          - "OPEN3D_RELEASE_SIGNING_KEY=fixture-only python3 -m unittest -v tests.test_production_release"
+          - "npm run build --prefix web"
+          - "python3 -m compileall -q open3d_artist tests"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Promotion can replace current state without preserving a checkpoint or can claim APPROVED without external visual-QA and Unity evidence."
+          - "Run artifacts, render paths, or release manifests are accepted without digest and path validation."
+          - "Provider, reference, visual-QA, Unity, or signing states are fabricated, or secrets are persisted or exposed to the viewer/MCP."
+          - "CLI, HTTP, and MCP promotion/release receipts diverge materially or permit arbitrary commands or unrestricted filesystem reads."
+          - "The viewer cannot load the receipt, all six named renders, promotion state, and release proof."
+          - "Verification fails twice without a clear local fix."
+      deferred_work:
+        - "Real Meshy/All2API calls, remote reference generation, external visual QA, bounded repair, and Unity approval."
+        - "Expansion beyond the representative fixture and native desktop packaging/browser automation."
+        - "Public artifact publication and GitHub OIDC attestations for production runs; local HMAC proof remains optional and is not approval."
+        - "Multi-run migration, garbage collection, and concurrency hardening."
+      missing_evidence:
+        - "No promotion operation writes a destination project's current ref."
+        - "No reversible promotion receipt or release manifest exists."
+        - "No normalized provider/reference/visual-QA availability record exists in the agent receipt."
+        - "The viewer does not fetch production state or display six renders."
+        - "No local signature generation and verification exists for run release metadata."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "This is one bounded write package with an explicit file scope; no concurrent Worker scope is proven."
+      blocked_tasks: []
+      required_board_updates:
+        - "Copy worker_package verbatim to the next Worker task and activate it."
+        - "Keep T999 queued and the goal active; this package is not full-outcome completion."
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement one local production-release handoff: promote a verified generated run into a destination Project current ref with immutable artifact copies and reversible checkpointing; persist run receipt, six renders, provenance, QA, promotion, adapter availability, and release metadata; expose promotion/release verification through CLI, HTTP, and typed MCP; and update the desktop viewer to show the receipt, six renders, adapter states, release proof, and truthful promotion state."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "open3d_artist/project.py"
+      - "open3d_artist/cli.py"
+      - "open3d_artist/server.py"
+      - "open3d_artist/mcp.py"
+      - "skills/open3d-production-asset/SKILL.md"
+      - "tests/test_production_release.py"
+      - "web/src/main.js"
+      - "web/src/styles.css"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release"
+      - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist validate \"$project_dir\""
+      - "OPEN3D_RELEASE_SIGNING_KEY=fixture-only python3 -m unittest -v tests.test_production_release"
+      - "npm run build --prefix web"
+      - "python3 -m compileall -q open3d_artist tests"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "Promotion can replace current state without preserving a checkpoint or can claim APPROVED without external visual-QA and Unity evidence."
+      - "Run artifacts, render paths, or release manifests are accepted without digest and path validation."
+      - "Provider, reference, visual-QA, Unity, or signing states are fabricated, or secrets are persisted or exposed to the viewer/MCP."
+      - "CLI, HTTP, and MCP promotion/release receipts diverge materially or permit arbitrary commands or unrestricted filesystem reads."
+      - "The viewer cannot load the receipt, all six named renders, promotion state, and release proof."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - skills/open3d-production-asset/SKILL.md
+        - tests/test_production_release.py
+        - web/src/main.js
+        - web/src/styles.css
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release"
+          status: pass
+        - cmd: "production-run; production-promote; validate"
+          status: pass
+        - cmd: "OPEN3D_RELEASE_SIGNING_KEY=fixture-only python3 -m unittest -v tests.test_production_release"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+      summary: "Implemented validated local production promotion with immutable CAS artifact copies, checkpoints, rollback proof, release metadata, optional HMAC signatures, truthful unavailable states, CLI/HTTP/MCP verification, viewer receipt/render/release display, and negative coverage."
+      remaining_blockers: []
+      verification_attempts: 1
+      stopped_because: null
+  - id: T010
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit the full local production handoff and select the next largest safe package for xFarm-compatible recipe scale, real visual-QA/provider adapters, and final release proof."
+    inputs:
+      - "T001 through T009 receipts"
+      - "Current implementation and generated artifacts"
+      - "xFarm six-view quality workflow"
+    constraints:
+      - "Read-only; do not implement."
+      - "Judge against the original high-quality production asset outcome, not only local tests."
+      - "Keep external services truthful and choose a locally verifiable fallback where credentials are absent."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T009 materially advances the oracle: generated artifacts include a valid GLB, six PNGs, CAS digests, rollback checkpoints, release metadata, and truthful unavailable gates, with CLI/HTTP/MCP/viewer coverage. The remaining system is still one hard-coded lantern recipe. Local QA checks geometry and render presence only; the reference is a local SVG, and no xFarm-style catalog, reference-first manifest, or repair-state evidence exists. Approve a bounded catalog/manifest slice without fabricating provider or Unity results."
+      evidence:
+        - docs/goals/production-asset-agents/notes/T009-receipt.json
+        - "open3d_artist/production.py:16-18 — six fixed views and a single hard-coded recipe registry"
+        - "tools/production_fixture/generate_fixture.py:145-169 — one generic fixture with local-only QA and no reference manifest"
+        - "Transient generated run receipt and promotion/release artifacts"
+        - "Transient QA artifact records local geometry PASS but external visual QA UNAVAILABLE"
+        - "/Users/ducna/Desktop/xFarm/skills/cloudvale-asset-generation/SKILL.md:21-29 — reference-first six-view candidate workflow"
+        - "/Users/ducna/Desktop/xFarm/tools/generate_cloudvale_qualification_assets.py:16-23,397-415 — multi-asset catalog and qualification manifest"
+      worker_package:
+        objective: "Add a checked-in xFarm-compatible local qualification catalog around the existing deterministic Blender path: catalog at least three assets (the existing lantern plus watering can and wood crate), resolve only catalog recipe IDs through the existing brief/CLI/HTTP/MCP contract, and emit a per-run reference_manifest.json with six required views, REFERENCE_SAMPLE before CANDIDATE attachments, reference/candidate digests, local technical status, and truthful UNAVAILABLE_REPAIR_REQUIRED and LOCAL_ONLY_NOT_APPROVED states. Test every catalog entry and one promotion/release path."
+        allowed_files:
+          - open3d_artist/production.py
+          - open3d_artist/mcp.py
+          - tools/production_fixture/generate_fixture.py
+          - tests/test_production_fixture.py
+          - tests/test_production_run.py
+          - tests/test_production_release.py
+          - tests/test_production_catalog.py
+          - skills/open3d-production-asset/SKILL.md
+          - examples/production-qualification/catalog.json
+          - examples/production-qualification/recipe-watering-can.json
+          - examples/production-qualification/reference-watering-can.svg
+          - examples/production-qualification/brief-watering-can.json
+          - examples/production-qualification/recipe-wood-crate.json
+          - examples/production-qualification/reference-wood-crate.svg
+          - examples/production-qualification/brief-wood-crate.json
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog"
+          - "for brief in examples/production-qualification/brief.json examples/production-qualification/brief-watering-can.json examples/production-qualification/brief-wood-crate.json; do run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief \"$brief\" --output \"$run_dir\"; python3 -m open3d_artist validate \"$run_dir\"; test -f \"$run_dir/reference_manifest.json\"; done"
+          - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief-watering-can.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist production-release-verify \"$project_dir\""
+          - "npm run build --prefix web"
+          - "python3 -m compileall -q open3d_artist tests tools/production_fixture"
+          - "git diff --check"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Catalog entries permit arbitrary paths, imports, commands, network access, providers, or unsandboxed Blender execution."
+          - "Any catalog recipe cannot produce a deterministic .blend/.glb, all six required views, and a digest-checked reference manifest."
+          - "The manifest omits REFERENCE_SAMPLE-before-CANDIDATE ordering or converts unavailable visual QA into PASS or APPROVED."
+          - "MCP, HTTP, and CLI brief semantics diverge or accept unknown recipe IDs."
+          - "The package adds a general asset DSL, batch scheduler, provider integration, Unity integration, visual repair engine, or viewer rewrite."
+          - "Verification fails twice without a clear local fix."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "T010 is read-only and no other write-capable task is active. The package has one shared runtime and fixture scope, so it should run as one Worker rather than parallel edits."
+      deferred_work:
+        - "Real independent reference generation and fresh external visual QA."
+        - "Bounded repair execution, repair history, numeric similarity gates, and BEST_VERSION rollback."
+        - "Expansion to xFarm's broader terrain, architecture, character, vegetation, animal, and assembly catalog."
+        - "Unity validation, provider calls, public publication, and actual Codex/Claude process receipts."
+      missing_evidence:
+        - "No checked-in multi-asset catalog currently exists."
+        - "No durable reference-first six-view manifest currently exists."
+        - "Only one generated asset has been proven locally."
+        - "No external visual-QA or repair evidence exists."
+        - "The final prompt/reference-to-approved-viewer release oracle remains incomplete."
+      required_board_updates:
+        - "PM should copy worker_package verbatim to the next Worker task and preserve one active task."
+        - "Keep T999 queued and the goal active; do not claim full-outcome completion."
+  - id: T011
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Add a checked-in xFarm-compatible local qualification catalog around the existing deterministic Blender path: catalog at least three assets (the existing lantern plus watering can and wood crate), resolve only catalog recipe IDs through the existing brief/CLI/HTTP/MCP contract, and emit a per-run reference_manifest.json with six required views, REFERENCE_SAMPLE before CANDIDATE attachments, reference/candidate digests, local technical status, and truthful UNAVAILABLE_REPAIR_REQUIRED and LOCAL_ONLY_NOT_APPROVED states. Test every catalog entry and one promotion/release path."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "open3d_artist/mcp.py"
+      - "tools/production_fixture/generate_fixture.py"
+      - "tests/test_production_fixture.py"
+      - "tests/test_production_run.py"
+      - "tests/test_production_release.py"
+      - "tests/test_production_catalog.py"
+      - "skills/open3d-production-asset/SKILL.md"
+      - "examples/production-qualification/catalog.json"
+      - "examples/production-qualification/recipe-watering-can.json"
+      - "examples/production-qualification/reference-watering-can.svg"
+      - "examples/production-qualification/brief-watering-can.json"
+      - "examples/production-qualification/recipe-wood-crate.json"
+      - "examples/production-qualification/reference-wood-crate.svg"
+      - "examples/production-qualification/brief-wood-crate.json"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog"
+      - "for brief in examples/production-qualification/brief.json examples/production-qualification/brief-watering-can.json examples/production-qualification/brief-wood-crate.json; do run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief \"$brief\" --output \"$run_dir\"; python3 -m open3d_artist validate \"$run_dir\"; test -f \"$run_dir/reference_manifest.json\"; done"
+      - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief-watering-can.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist production-release-verify \"$project_dir\""
+      - "npm run build --prefix web"
+      - "python3 -m compileall -q open3d_artist tests tools/production_fixture"
+      - "git diff --check"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "Catalog entries permit arbitrary paths, imports, commands, network access, providers, or unsandboxed Blender execution."
+      - "Any catalog recipe cannot produce a deterministic .blend/.glb, all six required views, and a digest-checked reference manifest."
+      - "The manifest omits REFERENCE_SAMPLE-before-CANDIDATE ordering or converts unavailable visual QA into PASS or APPROVED."
+      - "MCP, HTTP, and CLI brief semantics diverge or accept unknown recipe IDs."
+      - "The package adds a general asset DSL, batch scheduler, provider integration, Unity integration, visual repair engine, or viewer rewrite."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - open3d_artist/mcp.py
+        - tools/production_fixture/generate_fixture.py
+        - tests/test_production_fixture.py
+        - tests/test_production_catalog.py
+        - skills/open3d-production-asset/SKILL.md
+        - examples/production-qualification/catalog.json
+        - examples/production-qualification/recipe-watering-can.json
+        - examples/production-qualification/reference-watering-can.svg
+        - examples/production-qualification/brief-watering-can.json
+        - examples/production-qualification/recipe-wood-crate.json
+        - examples/production-qualification/reference-wood-crate.svg
+        - examples/production-qualification/brief-wood-crate.json
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog"
+          status: pass
+        - cmd: "catalog production-run/validate loop"
+          status: pass
+        - cmd: "watering-can production-promote/release-verify"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "python3 -m compileall -q open3d_artist tests tools/production_fixture"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added a checked-in three-asset qualification catalog with deterministic watering-can and wood-crate recipes, catalog-only brief resolution, six-view reference manifests with ordered digests, truthful unavailable visual QA/approval states, dynamic MCP recipe enums, and catalog/release coverage. All required verification gates pass."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T012
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the three-asset catalog and select the next largest safe package for external QA/repair modeling, agent execution proof, and final production readiness."
+    inputs:
+      - "T001 through T011 receipts"
+      - "Current catalog manifests and generated artifacts"
+      - "xFarm QA and agent conventions"
+    constraints:
+      - "Read-only; do not implement."
+      - "Use the original high-quality production asset oracle and verify what remains absent."
+      - "Do not fabricate external provider, visual QA, Unity, or agent process results."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt: null
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the full Open3D production asset and agent outcome is complete against the goal oracle."
+    inputs:
+      - "All done task receipts"
+      - "Last full verification"
+      - "Current dirty diff"
+      - "Generated fixture artifact and evidence"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject completion if any required Worker task remains queued or active."
+      - "Reject completion if the end-to-end oracle is not demonstrated."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Missing evidence"
+      - "Next task if not complete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

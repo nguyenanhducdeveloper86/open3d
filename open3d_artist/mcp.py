@@ -11,6 +11,7 @@ import sys
 from typing import Any
 
 from .project import Project, ProjectError
+from .production import catalog, promote_production, production_state, run_production, verify_release
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -25,6 +26,9 @@ TOOLS = [
     _tool("asset.validate", "Run deterministic QA against the current GLB.", {}, []),
     _tool("asset.edit_part", "Scale one semantic part and keep the change checkpointed.", {"part_id": {"type": "string"}, "scale_x": {"type": "number", "exclusiveMinimum": 0}, "scale_y": {"type": "number", "exclusiveMinimum": 0}, "scale_z": {"type": "number", "exclusiveMinimum": 0}, "idempotency_key": {"type": "string"}}, ["part_id"]),
     _tool("checkpoint.rollback", "Restore an exact prior checkpoint.", {"checkpoint_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}, ["checkpoint_id"]),
+    _tool("production.run", "Run a checked-in local production brief.", {"brief": {"type": "object", "additionalProperties": False, "properties": {"schema_version": {"type": "string", "const": "0.1.0"}, "brief_id": {"type": "string"}, "prompt": {"type": "string"}, "reference": {"type": "object"}, "recipe_id": {"type": "string", "enum": [entry["recipe_id"] for entry in catalog()]}, "views": {"type": "array", "items": {"type": "string"}}}, "required": ["brief_id", "prompt", "reference", "recipe_id", "views"]}, "output": {"type": "string"}}, ["brief", "output"]),
+    _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
+    _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
 ]
 
 
@@ -42,6 +46,12 @@ def _call(project: Project, name: str, args: dict[str, Any]) -> dict[str, Any]:
         return project.edit_part(args["part_id"], scales, idempotency_key=args.get("idempotency_key"))
     if name == "checkpoint.rollback":
         return project.rollback(args["checkpoint_id"])
+    if name == "production.run":
+        return run_production(args["brief"], args["output"])
+    if name == "production.promote":
+        return promote_production(args["run"], project.root)
+    if name == "production.release_verify":
+        return {"state": production_state(project), "verification": verify_release(project)}
     raise ProjectError(f"unknown tool: {name}")
 
 

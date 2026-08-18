@@ -1,0 +1,28 @@
+{
+  "schema_version": "0.1.0",
+  "recipe_id": "production-qualification-lantern-v1",
+  "prompt": "A compact brass camping lantern with a warm glass body, top cap, and carry handle; clean representative production prop.",
+  "reference": {"path": "reference.svg", "kind": "checked-in-local-reference", "sha256": "9edd15c77c92b2dabefd5421af8add6876a93de487331f1f12b3c846fe7e6aae"},
+  "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"],
+  "asset": {
+    "schema_version": "0.1.0",
+    "asset_id": "PROP-CAMP-LANTERN-001",
+    "kind": "prop",
+    "units": "m",
+    "dimensions": {"width": 0.60, "depth": 0.60, "height": 1.20},
+    "parts": [
+      {"part_id": "body", "role": "body", "mutable": true},
+      {"part_id": "cap", "role": "structural", "mutable": true},
+      {"part_id": "handle", "role": "functional", "mutable": true}
+    ],
+    "geometry": {
+      "triangle_budget": {"max": 2000},
+      "primitives": [
+        {"part_id": "body", "type": "cylinder", "radius": 0.24, "depth": 0.62, "segments": 24, "center": {"x": 0, "y": 0, "z": 0.39}, "color": "#C47A3A"},
+        {"part_id": "cap", "type": "cylinder", "radius": 0.28, "depth": 0.16, "segments": 24, "center": {"x": 0, "y": 0, "z": 0.78}, "color": "#B88A4A"},
+        {"part_id": "handle", "type": "box", "size": {"x": 0.10, "y": 0.46, "z": 0.50}, "center": {"x": 0, "y": 0, "z": 0.99}, "color": "#76512F"}
+      ]
+    },
+    "outputs": {"editable": "contract", "preview": "glb"}
+  }
+}

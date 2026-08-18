@@ -1,0 +1,66 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T006",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "T005 proves the local runner but not the operator-facing agent boundary: inputs remain recipe-only, selection is not an explicit brief-to-allowlist protocol, and the Codex/Claude skill contract is absent. Approve one vertical protocol slice over the existing sandboxed runner. It must preserve truthful local QA, unavailable external gates, and LOCAL_ONLY_NOT_APPROVED promotion.",
+    "evidence": [
+      "T005 receipt: fixed sandboxed CLI/HTTP/MCP production run passes.",
+      "open3d_artist/production.py: fixed recipe path and no structured brief registry.",
+      "open3d_artist/cli.py, server.py, mcp.py: recipe-oriented invocation surfaces.",
+      "specs/v0.1/skill-protocol.md: typed inputs, outputs, limits, validators, license, and provenance are required.",
+      "xFarm SKILL.md and agents/openai.yaml: established skill/agent convention.",
+      "Current verification passed: production fixture/run tests, web build, and compileall."
+    ],
+    "worker_package": {
+      "objective": "Implement a harness-neutral Open3D production-agent protocol: accept a structured asset brief, resolve only an explicit checked-in recipe ID, invoke the existing network-denied Blender runner, and return a stable agent receipt containing brief identity, selected recipe, six-view/local QA, artifact refs, sandbox/network facts, unavailable external gates, and truthful promotion state. Expose the same brief contract through CLI, HTTP, and typed MCP, and document Codex/Claude Code invocation in an installable skill package.",
+      "allowed_files": [
+        "open3d_artist/production.py",
+        "open3d_artist/cli.py",
+        "open3d_artist/server.py",
+        "open3d_artist/mcp.py",
+        "tests/test_production_run.py",
+        "examples/production-qualification/brief.json",
+        "skills/open3d-production-asset/SKILL.md",
+        "skills/open3d-production-asset/agents/openai.yaml"
+      ],
+      "verify": [
+        "python3 -m unittest -v tests.test_production_fixture tests.test_production_run",
+        "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m open3d_artist validate \"$run_dir\"",
+        "npm run build --prefix web",
+        "python3 -m compileall -q open3d_artist tests"
+      ],
+      "stop_if": [
+        "Any required change falls outside allowed_files.",
+        "Brief input permits arbitrary recipe paths, shell/Python execution, network access, provider calls, or unbounded filesystem access.",
+        "Recipe selection is not restricted to checked-in allowlisted recipe IDs.",
+        "CLI, HTTP, and MCP do not produce equivalent receipt semantics.",
+        "The protocol claims Codex or Claude execution without a locally verifiable invocation result.",
+        "External visual QA, Unity, Meshy, All2API, signing, or approval can appear PASS/APPROVED without evidence.",
+        "Verification fails twice without a clear local fix."
+      ]
+    },
+    "deferred_work": [
+      "External visual QA, bounded repair, Meshy/All2API integration, and Unity validation.",
+      "Signed artifact metadata, public approval, and release publication.",
+      "Browser-level viewer proof and expansion beyond the representative fixture."
+    ],
+    "subgoal_contract": null,
+    "parallel_safety": {
+      "safe": true,
+      "reason": "T006 is read-only and no other write-capable Worker is active."
+    },
+    "blocked_tasks": [],
+    "missing_evidence": [
+      "Structured brief and bounded recipe-selection protocol do not yet exist.",
+      "Codex/Claude skill package and agent-facing receipt contract do not yet exist.",
+      "Full oracle remains unproven for external visual QA, Unity, signed metadata, and final approval."
+    ],
+    "required_board_updates": [
+      "PM should copy worker_package verbatim to the next free Worker task and activate it.",
+      "Keep the goal active and T999 queued; do not claim completion after this slice."
+    ]
+  }
+}

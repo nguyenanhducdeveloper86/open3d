@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "recipe_id": "production-qualification-watering-can-v1",
+  "prompt": "A simple teal metal watering can with a round body, top handle, and angled spout; clean representative production prop.",
+  "reference": {"path": "reference-watering-can.svg", "kind": "checked-in-local-reference", "sha256": "bfb6e59f535f0ec5a2ee9a929729178b7a408ba3779e638252bd9750f9320480"},
+  "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"],
+  "asset": {
+    "schema_version": "0.1.0", "asset_id": "PROP-GARDEN-WATERING-CAN-001", "kind": "prop", "units": "m",
+    "dimensions": {"width": 1.1, "depth": 0.7, "height": 0.8},
+    "parts": [{"part_id": "body", "role": "body", "mutable": true}, {"part_id": "handle", "role": "functional", "mutable": true}, {"part_id": "spout", "role": "functional", "mutable": true}],
+    "geometry": {"triangle_budget": {"max": 2000}, "primitives": [
+      {"part_id": "body", "type": "cylinder", "radius": 0.34, "depth": 0.55, "segments": 24, "center": {"x": 0, "y": 0, "z": 0.35}, "color": "#278C87"},
+      {"part_id": "handle", "type": "box", "size": {"x": 0.12, "y": 0.58, "z": 0.42}, "center": {"x": 0, "y": 0, "z": 0.72}, "color": "#195E62"},
+      {"part_id": "spout", "type": "box", "size": {"x": 0.62, "y": 0.14, "z": 0.14}, "center": {"x": 0.48, "y": 0, "z": 0.48}, "color": "#42A7A0"}
+    ]},
+    "outputs": {"editable": "contract", "preview": "glb"}
+  }
+}

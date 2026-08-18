@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+  <rect width="320" height="240" fill="#0b1220"/>
+  <g fill="none" stroke="#d79b52" stroke-width="8" stroke-linejoin="round">
+    <path d="M112 72h96l-12 100h-72z" fill="#c47a3a"/>
+    <path d="M104 72h112l-10-22h-92z" fill="#b88a4a"/>
+    <path d="M132 50c0-42 56-42 56 0" stroke="#76512f"/>
+  </g>
+  <text x="16" y="222" fill="#dce7f5" font-family="sans-serif" font-size="14">PROP-CAMP-LANTERN-001</text>
+</svg>

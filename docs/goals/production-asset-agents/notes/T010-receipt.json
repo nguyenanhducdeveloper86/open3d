@@ -1,0 +1,78 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T010",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "T009 materially advances the oracle: generated artifacts include a valid GLB, six PNGs, CAS digests, rollback checkpoints, release metadata, and truthful unavailable gates, with CLI/HTTP/MCP/viewer coverage. The remaining system is still one hard-coded lantern recipe. Local QA checks geometry and render presence only; the reference is a local SVG, and no xFarm-style catalog, reference-first manifest, or repair-state evidence exists. Approve a bounded catalog/manifest slice without fabricating provider or Unity results.",
+    "evidence": [
+      "docs/goals/production-asset-agents/notes/T009-receipt.json",
+      "open3d_artist/production.py:16-18 — six fixed views and a single hard-coded recipe registry",
+      "tools/production_fixture/generate_fixture.py:145-169 — one generic fixture with local-only QA and no reference manifest",
+      "Transient generated run receipt and promotion/release artifacts",
+      "Transient QA artifact records local geometry PASS but external visual QA UNAVAILABLE",
+      "/Users/ducna/Desktop/xFarm/skills/cloudvale-asset-generation/SKILL.md:21-29 — reference-first six-view candidate workflow",
+      "/Users/ducna/Desktop/xFarm/tools/generate_cloudvale_qualification_assets.py:16-23,397-415 — multi-asset catalog and qualification manifest"
+    ],
+    "worker_package": {
+      "objective": "Add a checked-in xFarm-compatible local qualification catalog around the existing deterministic Blender path: catalog at least three assets (the existing lantern plus watering can and wood crate), resolve only catalog recipe IDs through the existing brief/CLI/HTTP/MCP contract, and emit a per-run reference_manifest.json with six required views, REFERENCE_SAMPLE before CANDIDATE attachments, reference/candidate digests, local technical status, and truthful UNAVAILABLE_REPAIR_REQUIRED and LOCAL_ONLY_NOT_APPROVED states. Test every catalog entry and one promotion/release path.",
+      "allowed_files": [
+        "open3d_artist/production.py",
+        "open3d_artist/mcp.py",
+        "tools/production_fixture/generate_fixture.py",
+        "tests/test_production_fixture.py",
+        "tests/test_production_run.py",
+        "tests/test_production_release.py",
+        "tests/test_production_catalog.py",
+        "skills/open3d-production-asset/SKILL.md",
+        "examples/production-qualification/catalog.json",
+        "examples/production-qualification/recipe-watering-can.json",
+        "examples/production-qualification/reference-watering-can.svg",
+        "examples/production-qualification/brief-watering-can.json",
+        "examples/production-qualification/recipe-wood-crate.json",
+        "examples/production-qualification/reference-wood-crate.svg",
+        "examples/production-qualification/brief-wood-crate.json"
+      ],
+      "verify": [
+        "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog",
+        "for brief in examples/production-qualification/brief.json examples/production-qualification/brief-watering-can.json examples/production-qualification/brief-wood-crate.json; do run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief \"$brief\" --output \"$run_dir\"; python3 -m open3d_artist validate \"$run_dir\"; test -f \"$run_dir/reference_manifest.json\"; done",
+        "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief-watering-can.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist production-release-verify \"$project_dir\"",
+        "npm run build --prefix web",
+        "python3 -m compileall -q open3d_artist tests tools/production_fixture",
+        "git diff --check"
+      ],
+      "stop_if": [
+        "Any required change falls outside allowed_files.",
+        "Catalog entries permit arbitrary paths, imports, commands, network access, providers, or unsandboxed Blender execution.",
+        "Any catalog recipe cannot produce a deterministic .blend/.glb, all six required views, and a digest-checked reference manifest.",
+        "The manifest omits REFERENCE_SAMPLE-before-CANDIDATE ordering or converts unavailable visual QA into PASS or APPROVED.",
+        "MCP, HTTP, and CLI brief semantics diverge or accept unknown recipe IDs.",
+        "The package adds a general asset DSL, batch scheduler, provider integration, Unity integration, visual repair engine, or viewer rewrite.",
+        "Verification fails twice without a clear local fix."
+      ]
+    },
+    "subgoal_contract": null,
+    "parallel_safety": {
+      "safe": true,
+      "reason": "T010 is read-only and no other write-capable task is active. The package has one shared runtime and fixture scope, so it should run as one Worker rather than parallel edits."
+    },
+    "deferred_work": [
+      "Real independent reference generation and fresh external visual QA.",
+      "Bounded repair execution, repair history, numeric similarity gates, and BEST_VERSION rollback.",
+      "Expansion to xFarm's broader terrain, architecture, character, vegetation, animal, and assembly catalog.",
+      "Unity validation, provider calls, public publication, and actual Codex/Claude process receipts."
+    ],
+    "missing_evidence": [
+      "No checked-in multi-asset catalog currently exists.",
+      "No durable reference-first six-view manifest currently exists.",
+      "Only one generated asset has been proven locally.",
+      "No external visual-QA or repair evidence exists.",
+      "The final prompt/reference-to-approved-viewer release oracle remains incomplete."
+    ],
+    "required_board_updates": [
+      "PM should copy worker_package verbatim to the next Worker task and preserve one active task.",
+      "Keep T999 queued and the goal active; do not claim full-outcome completion."
+    ]
+  }
+}

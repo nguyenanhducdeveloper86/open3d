@@ -1,0 +1,55 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T002",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "Approve one Open3D-native representative-asset fixture rather than porting xFarm wholesale. It exercises the real oracle boundary locally—deterministic Blender generation, .blend/.glb output, six tagged renders, machine-readable evidence/QA, and existing Open3D validation—without Unity, providers, credentials, or external APIs. The slice is substantial, bounded, reversible, and establishes the contract needed before expanding to multiple assets or agent integrations. External checks must be recorded as unavailable, never passed.",
+    "evidence": [
+      "docs/goals/production-asset-agents/notes/T001-receipt.json",
+      "T001 verified Blender 5.2, existing Open3D validation, and passing repository tests.",
+      "goal.md requires a reproducible prompt/reference-to-Blender fixture with six renders, QA/provenance evidence, and Open3D verification."
+    ],
+    "worker_package": {
+      "objective": "Create one checked-in prompt-plus-local-reference production qualification fixture for a representative asset. Run Blender deterministically from a recipe, emit .blend/.glb, six tagged PNG renders, machine-readable provenance/evidence and truthful local QA, then verify the GLB with the existing Open3D validator.",
+      "allowed_files": [
+        "tools/production_fixture/generate_fixture.py",
+        "examples/production-qualification/recipe.json",
+        "examples/production-qualification/reference.svg",
+        "tests/test_production_fixture.py"
+      ],
+      "verify": [
+        "blender --background --factory-startup --python tools/production_fixture/generate_fixture.py -- --recipe examples/production-qualification/recipe.json --output /tmp/open3d-production-qualification",
+        "python3 -m open3d_artist validate /tmp/open3d-production-qualification",
+        "python3 -m unittest -v tests.test_production_fixture"
+      ],
+      "stop_if": [
+        "Any required change falls outside allowed_files.",
+        "Blender generation requires network access, provider credentials, Unity, Meshy, All2API, or non-deterministic external inference.",
+        "The fixture cannot produce all six named views and machine-readable evidence/QA.",
+        "Existing Open3D validation requires product changes outside this package.",
+        "Verification fails twice without a clear local fix."
+      ]
+    },
+    "subgoal_contract": null,
+    "parallel_safety": {
+      "safe": true,
+      "reason": "Only T003 is write-capable; no concurrent Worker scope exists."
+    },
+    "blocked_tasks": [],
+    "missing_evidence": [
+      "The checked-in fixture and exact recipe contract do not yet exist.",
+      "External visual QA, Unity validation, provider integration, and agent receipts remain unproven."
+    ],
+    "deferred_work": [
+      "Expand from one representative asset to the xFarm-style six-asset catalog.",
+      "Add reference-first external visual QA, bounded repair, Meshy/All2API integration, and Unity validation.",
+      "Add Codex/Claude adapters or skills, viewer-load proof, promotion, signing, and release metadata."
+    ],
+    "required_board_updates": [
+      "Copy worker_package verbatim to T003, activate T003, and preserve one active task.",
+      "Do not mark the goal complete after T003; continue toward the remaining oracle evidence."
+    ]
+  }
+}

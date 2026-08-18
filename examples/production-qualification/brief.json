@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "brief_id": "qualification-lantern-local-v1",
+  "prompt": "A compact brass camping lantern with a warm glass body, top cap, and carry handle; clean representative production prop.",
+  "reference": {"path": "reference.svg", "kind": "checked-in-local-reference", "sha256": "9edd15c77c92b2dabefd5421af8add6876a93de487331f1f12b3c846fe7e6aae"},
+  "recipe_id": "production-qualification-lantern-v1",
+  "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"]
+}

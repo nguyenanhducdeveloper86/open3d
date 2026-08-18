@@ -1,0 +1,72 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T008",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "T007 proves the bounded generation protocol, but generated runs are not promoted into a destination project's current ref, the viewer does not consume production receipts or renders, and release signing is only package-level CI metadata. Approve one cohesive local release-handoff slice: reversible promotion, normalized unavailable adapter states, viewer evidence display, and optional locally verifiable signing. Keep Meshy, All2API, Unity, and external visual QA unavailable unless independently configured.",
+    "evidence": [
+      "docs/goals/production-asset-agents/notes/T007-receipt.json",
+      "open3d_artist/production.py",
+      "open3d_artist/project.py",
+      "open3d_artist/server.py",
+      "web/src/main.js",
+      "scripts/build_release.py",
+      ".github/workflows/release.yml"
+    ],
+    "worker_package": {
+      "objective": "Implement one local production-release handoff: promote a verified generated run into a destination Project current ref with immutable artifact copies and reversible checkpointing; persist run receipt, six renders, provenance, QA, promotion, adapter availability, and release metadata; expose promotion/release verification through CLI, HTTP, and typed MCP; and update the desktop viewer to show the receipt, six renders, adapter states, release proof, and truthful promotion state.",
+      "allowed_files": [
+        "open3d_artist/production.py",
+        "open3d_artist/project.py",
+        "open3d_artist/cli.py",
+        "open3d_artist/server.py",
+        "open3d_artist/mcp.py",
+        "skills/open3d-production-asset/SKILL.md",
+        "tests/test_production_release.py",
+        "web/src/main.js",
+        "web/src/styles.css"
+      ],
+      "verify": [
+        "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release",
+        "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist validate \"$project_dir\"",
+        "OPEN3D_RELEASE_SIGNING_KEY=fixture-only python3 -m unittest -v tests.test_production_release",
+        "npm run build --prefix web",
+        "python3 -m compileall -q open3d_artist tests"
+      ],
+      "stop_if": [
+        "Any required change falls outside allowed_files.",
+        "Promotion can replace current state without preserving a checkpoint or can claim APPROVED without external visual-QA and Unity evidence.",
+        "Run artifacts, render paths, or release manifests are accepted without digest and path validation.",
+        "Provider, reference, visual-QA, Unity, or signing states are fabricated, or secrets are persisted or exposed to the viewer/MCP.",
+        "CLI, HTTP, and MCP promotion/release receipts diverge materially or permit arbitrary commands or unrestricted filesystem reads.",
+        "The viewer cannot load the receipt, all six named renders, promotion state, and release proof.",
+        "Verification fails twice without a clear local fix."
+      ]
+    },
+    "deferred_work": [
+      "Real Meshy/All2API calls, remote reference generation, external visual QA, bounded repair, and Unity approval.",
+      "Expansion beyond the representative fixture and native desktop packaging/browser automation.",
+      "Public artifact publication and GitHub OIDC attestations for production runs; local HMAC proof remains optional and is not approval.",
+      "Multi-run migration, garbage collection, and concurrency hardening."
+    ],
+    "missing_evidence": [
+      "No promotion operation writes a destination project's current ref.",
+      "No reversible promotion receipt or release manifest exists.",
+      "No normalized provider/reference/visual-QA availability record exists in the agent receipt.",
+      "The viewer does not fetch production state or display six renders.",
+      "No local signature generation and verification exists for run release metadata."
+    ],
+    "subgoal_contract": null,
+    "parallel_safety": {
+      "safe": true,
+      "reason": "This is one bounded write package with an explicit file scope; no concurrent Worker scope is proven."
+    },
+    "blocked_tasks": [],
+    "required_board_updates": [
+      "Copy worker_package verbatim to the next Worker task and activate it.",
+      "Keep T999 queued and the goal active; this package is not full-outcome completion."
+    ]
+  }
+}

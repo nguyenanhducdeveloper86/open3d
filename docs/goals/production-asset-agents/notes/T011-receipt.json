@@ -1,0 +1,52 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T011",
+    "board_path": "docs/goals/production-asset-agents/state.yaml",
+    "changed_files": [
+      "open3d_artist/production.py",
+      "open3d_artist/mcp.py",
+      "tools/production_fixture/generate_fixture.py",
+      "tests/test_production_fixture.py",
+      "tests/test_production_catalog.py",
+      "skills/open3d-production-asset/SKILL.md",
+      "examples/production-qualification/catalog.json",
+      "examples/production-qualification/recipe-watering-can.json",
+      "examples/production-qualification/reference-watering-can.svg",
+      "examples/production-qualification/brief-watering-can.json",
+      "examples/production-qualification/recipe-wood-crate.json",
+      "examples/production-qualification/reference-wood-crate.svg",
+      "examples/production-qualification/brief-wood-crate.json"
+    ],
+    "commands": [
+      {
+        "cmd": "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog",
+        "status": "pass"
+      },
+      {
+        "cmd": "catalog production-run/validate loop",
+        "status": "pass"
+      },
+      {
+        "cmd": "watering-can production-promote/release-verify",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm run build --prefix web",
+        "status": "pass"
+      },
+      {
+        "cmd": "python3 -m compileall -q open3d_artist tests tools/production_fixture",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "summary": "Added a checked-in three-asset qualification catalog with deterministic watering-can and wood-crate recipes, catalog-only brief resolution, six-view reference manifests with ordered digests, truthful unavailable visual QA/approval states, dynamic MCP recipe enums, and catalog/release coverage. All required verification gates pass.",
+    "remaining_blockers": [],
+    "verification_attempts": 2,
+    "stopped_because": null
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "recipes": [
+    {"recipe_id": "production-qualification-lantern-v1", "recipe": "recipe.json", "asset_id": "PROP-CAMP-LANTERN-001"},
+    {"recipe_id": "production-qualification-watering-can-v1", "recipe": "recipe-watering-can.json", "asset_id": "PROP-GARDEN-WATERING-CAN-001"},
+    {"recipe_id": "production-qualification-wood-crate-v1", "recipe": "recipe-wood-crate.json", "asset_id": "PROP-WOOD-CRATE-001"}
+  ]
+}

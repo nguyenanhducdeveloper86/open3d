@@ -1,0 +1,6 @@
+{
+  "schema_version": "0.1.0", "brief_id": "qualification-wood-crate-local-v1",
+  "prompt": "A compact warm wooden shipping crate with four corner posts and a slatted lid; clean representative production prop.",
+  "reference": {"path": "reference-wood-crate.svg", "kind": "checked-in-local-reference", "sha256": "ecbd2aade78064cf53f5d1756556a2426c06034db52322dafef0e228e8c57016"},
+  "recipe_id": "production-qualification-wood-crate-v1", "views": ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"]
+}

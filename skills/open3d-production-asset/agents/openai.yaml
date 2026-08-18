@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open3D Production Asset"
+  short_description: "Run a sandboxed checked-in Open3D production brief"
+  default_prompt: "Use $open3d-production-asset for a local production brief and inspect its truthful receipt."

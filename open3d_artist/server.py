@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from .project import Project, ProjectError
+from .production import REQUIRED_VIEWS, production_state, promote_production, run_production, verify_release
 from .providers import ConsentRequired, MeshyImageTo3D, ProviderError, provider_catalog
 from .unity import UnityValidator
 from .workers import BlenderSandbox, WorkerError, WorkerUnavailable
@@ -83,6 +84,18 @@ class _Handler(BaseHTTPRequestHandler):
                 if path == "/api/artifact/current":
                     data = self.server.project.store.read_bytes(self.server.project.current()["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
+                if path == "/api/production/state":
+                    return self._send(HTTPStatus.OK, production_state(self.server.project))
+                if path == "/api/production/release":
+                    return self._send(HTTPStatus.OK, {"release": production_state(self.server.project)["release"], "verification": verify_release(self.server.project)})
+                if path.startswith("/api/production/render/"):
+                    view = path.rsplit("/", 1)[-1]
+                    if view not in REQUIRED_VIEWS:
+                        return self._error(HTTPStatus.NOT_FOUND, "render not found")
+                    artifact = self.server.project.current().get("production_artifacts", {}).get("renders", {}).get(view)
+                    if not artifact:
+                        return self._error(HTTPStatus.NOT_FOUND, "render unavailable")
+                    return self._send(HTTPStatus.OK, self.server.project.store.read_bytes(artifact), content_type="image/png")
             self._static(path)
         except (ProjectError, OSError, ValueError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
@@ -106,6 +119,13 @@ class _Handler(BaseHTTPRequestHandler):
                     unity_project = (self.server.project.root / unity_value if not unity_value.is_absolute() else unity_value).resolve()
                     unity_project.relative_to(self.server.project.root)
                     value = UnityValidator(unity_project, unity=body.get("unity", "unity-editor")).run(body["input_asset"], body.get("output_report", ".open3d/unity-report.json"), timeout=float(body.get("timeout", 600)))
+                elif path == "/api/production/run":
+                    value = run_production(body["brief"], body["output"], timeout=float(body.get("timeout", 300)))
+                elif path == "/api/production/promote":
+                    destination = Path(body.get("project", str(self.server.project.root))).resolve()
+                    if destination != self.server.project.root:
+                        raise ProjectError("HTTP promotion destination must be the served project")
+                    value = promote_production(body["run"], destination)
                 else:
                     return self._error(HTTPStatus.NOT_FOUND, "route not found")
             self._send(HTTPStatus.OK, value)

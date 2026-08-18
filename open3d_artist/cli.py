@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .mcp import serve_stdio
 from .providers import MeshyImageTo3D, ProviderError, provider_catalog
+from .production import promote_production, run_production, verify_release
 from .project import Project, ProjectError
 from .server import serve
 from .unity import UnityValidator
@@ -79,6 +80,16 @@ def build_parser() -> argparse.ArgumentParser:
     provider.add_argument("image_url")
     provider.add_argument("--consent", action="store_true", required=True, help="confirm that the image may be uploaded to Meshy")
     provider.add_argument("--timeout", type=float, default=900)
+
+    production = commands.add_parser("production-run", help="run a checked-in local production brief")
+    production.add_argument("--brief", required=True, type=Path)
+    production.add_argument("--output", required=True, type=Path)
+    production.add_argument("--timeout", type=float, default=300)
+    promote = commands.add_parser("production-promote", help="promote a verified local production run")
+    promote.add_argument("--run", required=True, type=Path)
+    promote.add_argument("--project", required=True, type=Path)
+    release = commands.add_parser("production-release-verify", help="verify promoted release artifacts")
+    release.add_argument("project", type=Path)
     return parser
 
 
@@ -93,6 +104,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "providers":
             _json(provider_catalog())
             return 0
+        if args.command == "production-run":
+            _json(run_production(json.loads(args.brief.read_text(encoding="utf-8")), args.output, timeout=args.timeout))
+            return 0
+        if args.command == "production-promote":
+            _json(promote_production(args.run, args.project))
+            return 0
+        if args.command == "production-release-verify":
+            value = verify_release(Project(args.project))
+            _json(value)
+            return 0 if value["status"] == "PASS" else 1
         if args.command == "unity-validate":
             value = UnityValidator(args.unity_project, unity=args.unity).run(args.input_asset, args.output, timeout=args.timeout)
             _json(value)
