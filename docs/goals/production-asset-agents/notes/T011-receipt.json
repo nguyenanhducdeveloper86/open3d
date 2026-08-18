@@ -45,6 +45,8 @@
       }
     ],
     "summary": "Added a checked-in three-asset qualification catalog with deterministic watering-can and wood-crate recipes, catalog-only brief resolution, six-view reference manifests with ordered digests, truthful unavailable visual QA/approval states, dynamic MCP recipe enums, and catalog/release coverage. All required verification gates pass.",
+    "commit": "9f26c3d",
+    "pushed_to": "origin/main",
     "remaining_blockers": [],
     "verification_attempts": 2,
     "stopped_because": null
