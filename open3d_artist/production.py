@@ -6,6 +6,8 @@ import json
 import hashlib
 import hmac
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -158,7 +160,50 @@ def _reference_manifest(root: Path, recipe: dict[str, Any]) -> dict[str, Any]:
     target.write_bytes(source.read_bytes())
     attachments = [{"role": "REFERENCE_SAMPLE", "path": "reference.svg", "sha256": digest_bytes(target.read_bytes())}]
     attachments.extend({"role": "CANDIDATE", "view": view, "path": f"{view}.png", "sha256": digest_bytes((root / f"{view}.png").read_bytes())} for view in REQUIRED_VIEWS)
-    return {"schema_version": "0.1.0", "asset_id": recipe["asset"]["asset_id"], "required_views": REQUIRED_VIEWS, "attachments": attachments, "reference": {"status": "AVAILABLE", "kind": reference["kind"]}, "candidate": {"status": "LOCAL_TECHNICAL_PASS"}, "visual_qa": {"status": "UNAVAILABLE_REPAIR_REQUIRED", "reason": "External reference-first visual QA is not configured."}, "approval": "LOCAL_ONLY_NOT_APPROVED"}
+    visual_qa = _local_visual_qa(root, target, root / "HERO_3Q.png")
+    return {"schema_version": "0.1.0", "asset_id": recipe["asset"]["asset_id"], "required_views": REQUIRED_VIEWS, "attachments": attachments, "reference": {"status": "AVAILABLE", "kind": reference["kind"]}, "candidate": {"status": "LOCAL_TECHNICAL_PASS"}, "visual_qa": visual_qa, "repair": {"status": "UNAVAILABLE_REPAIR_REQUIRED", "max_attempts": 3, "attempts": 0, "BEST_VERSION": "v001", "best_version": "v001", "rollback": {"available": True, "version": "v001", "geometry_mutated": False, "reason": "No geometry-changing repair was run."}}, "approval": "LOCAL_ONLY_NOT_APPROVED"}
+
+
+def _safe_raster_source(path: Path, root: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ProjectError("visual QA source must stay inside the run") from exc
+    if path.is_symlink() or not path.is_file() or resolved.stat().st_size > 10 * 1024 * 1024:
+        raise ProjectError("visual QA source is unsafe")
+    return resolved
+
+
+def _rasterize(path: Path, output: Path, root: Path) -> bytes:
+    source = _safe_raster_source(path, root)
+    # Fixed, bounded invocation; inputs never contribute options or commands.
+    command = ["convert", "-font", "/System/Library/Fonts/Helvetica.ttc", str(source), "-background", "#ffffff", "-alpha", "remove", "-alpha", "off", "-resize", "256x256!", "-depth", "8", f"RGB:{output}"]
+    try:
+        subprocess.run(command, cwd=root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ProjectError("local ImageMagick visual QA failed") from exc
+    raw = output.read_bytes()
+    if len(raw) != 256 * 256 * 3:
+        raise ProjectError("local visual QA raster has unexpected dimensions")
+    return raw
+
+
+def _local_visual_qa(root: Path, reference: Path, candidate: Path) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="open3d-visual-qa-") as directory:
+        work = Path(directory)
+        reference_pixels = _rasterize(reference, work / "reference.rgb", root)
+        candidate_pixels = _rasterize(candidate, work / "candidate.rgb", root)
+    differences = [abs(left - right) for left, right in zip(reference_pixels, candidate_pixels)]
+    mean_absolute_error = sum(differences) / len(differences)
+    similarity = round(1.0 - mean_absolute_error / 255.0, 6)
+    matched = ["REFERENCE_RASTER", "HERO_3Q_CANDIDATE", "RASTER_DIMENSIONS"]
+    mismatched = []
+    if similarity < 0.9:
+        mismatched.append("HERO_3Q_VISUAL_SIMILARITY")
+    else:
+        matched.append("HERO_3Q_VISUAL_SIMILARITY")
+    return {"status": "UNAVAILABLE_REPAIR_REQUIRED", "approval": "LOCAL_ONLY_NOT_APPROVED", "method": "LOCAL_IMAGEMAGICK_RGB_MAE", "command": "convert -font /System/Library/Fonts/Helvetica.ttc <checked-in-path> -background #ffffff -alpha remove -alpha off -resize 256x256! -depth 8 RGB:<temporary-path>", "dimensions": {"width": 256, "height": 256, "channels": 3}, "reference_digest": digest_bytes(reference.read_bytes()), "candidate_digest": digest_bytes(candidate.read_bytes()), "similarity": similarity, "mean_absolute_error": round(mean_absolute_error, 6), "differing_bytes": sum(value != 0 for value in differences), "matched_components": matched, "mismatched_components": mismatched, "next_action": "REPAIR_REQUIRED_BEFORE_APPROVAL", "scope": "PACK_PENDING_FULL_6_VIEW"}
 
 
 def release_metadata(receipt: dict[str, Any]) -> dict[str, Any]:

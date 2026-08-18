@@ -10,6 +10,11 @@ one of the checked-in catalog recipes (`lantern`, `watering-can`, or
 `wood-crate`), and returns a
 stable receipt with six-view QA, artifact references, sandbox/network facts,
 unavailable external gates, and `LOCAL_ONLY_NOT_APPROVED` promotion.
+Each run also rasterizes only the checked-in SVG reference and `HERO_3Q.png`
+with a fixed bounded ImageMagick command and records deterministic local
+similarity evidence. This is local evidence only: the manifest remains
+`UNAVAILABLE_REPAIR_REQUIRED`, scopes follow-up as `PACK_PENDING_FULL_6_VIEW`,
+and repair is capped at three attempts without changing geometry.
 
 Codex or Claude Code invocation:
 

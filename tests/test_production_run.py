@@ -30,6 +30,12 @@ class ProductionRunTest(unittest.TestCase):
             self.assertTrue(Project(output).validate()["status"] == "PASS")
             self.assertTrue(result["current"]["glb"].startswith("sha256:"))
             self.assertTrue(result["current"]["qa"].startswith("sha256:"))
+            visual_qa = result["receipt"]["reference_manifest"]["visual_qa"]
+            self.assertEqual(visual_qa["scope"], "PACK_PENDING_FULL_6_VIEW")
+            self.assertEqual(visual_qa["approval"], "LOCAL_ONLY_NOT_APPROVED")
+            self.assertTrue(visual_qa["reference_digest"].startswith("sha256:"))
+            self.assertTrue(visual_qa["candidate_digest"].startswith("sha256:"))
+            self.assertEqual(result["receipt"]["reference_manifest"]["repair"]["max_attempts"], 3)
 
             web = Path(directory) / "web"
             web.mkdir()

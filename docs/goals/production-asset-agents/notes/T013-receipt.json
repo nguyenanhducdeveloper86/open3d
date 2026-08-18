@@ -1,0 +1,48 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T013",
+    "board_path": "docs/goals/production-asset-agents/state.yaml",
+    "changed_files": [
+      "open3d_artist/production.py",
+      "tests/test_production_visual_qa.py",
+      "tests/test_production_run.py",
+      "tests/test_production_catalog.py",
+      "skills/open3d-production-asset/SKILL.md"
+    ],
+    "commands": [
+      {
+        "cmd": "command -v convert",
+        "status": "pass"
+      },
+      {
+        "cmd": "production tests",
+        "status": "pass"
+      },
+      {
+        "cmd": "catalog production runs",
+        "status": "pass"
+      },
+      {
+        "cmd": "promotion and release verification",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm run build --prefix web",
+        "status": "pass"
+      },
+      {
+        "cmd": "python3 -m compileall -q open3d_artist tests",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "summary": "Added fixed bounded ImageMagick rasterization and deterministic HERO_3Q similarity evidence, explicit components/actions/scope, and truthful capped repair metadata with rollback/BEST_VERSION. Promotion and release semantics remain local-only and unapproved.",
+    "remaining_blockers": [],
+    "verification_attempts": 2,
+    "stopped_because": null
+  }
+}

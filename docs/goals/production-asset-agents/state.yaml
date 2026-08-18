@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T012
+active_task: T014
 
 tasks:
   - id: T001
@@ -767,7 +767,7 @@ tasks:
   - id: T012
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the three-asset catalog and select the next largest safe package for external QA/repair modeling, agent execution proof, and final production readiness."
     inputs:
@@ -778,6 +778,141 @@ tasks:
       - "Read-only; do not implement."
       - "Use the original high-quality production asset oracle and verify what remains absent."
       - "Do not fabricate external provider, visual QA, Unity, or agent process results."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T011 proves a bounded three-asset local catalog, six-view manifests, sandboxed generation, promotion, viewer evidence, and truthful unavailable states. The highest-leverage next slice is deterministic local visual comparison plus bounded repair-state receipts. It improves quality evidence without fabricating external QA, providers, Unity, or agent execution. Actual geometry repair, independent references, and process receipts remain subsequent gates."
+      evidence:
+        - "T011 receipt: commit 9f26c3d passed catalog, release, build, compile, and diff checks; push recorded by 976918a."
+        - "open3d_artist/production.py currently records UNAVAILABLE_REPAIR_REQUIRED but performs no image comparison or repair state transition."
+        - "tools/production_fixture/generate_fixture.py emits six candidate PNGs and local technical QA only."
+        - "xFarm SKILL.md requires numeric similarity, mismatch-to-action evidence, bounded repair, BEST_VERSION rollback, and truthful unavailable states."
+      worker_package:
+        objective: "Add deterministic local visual QA to every checked-in production run by rasterizing the checked-in SVG reference and HERO_3Q candidate with a fixed native ImageMagick command, computing a reproducible similarity report, and emitting explicit matched/mismatched components, next action, and PACK_PENDING_FULL_6_VIEW scope. Add a bounded repair-state receipt with max three attempts, BEST_VERSION/rollback metadata, and truthful UNAVAILABLE_REPAIR_REQUIRED behavior; do not mutate geometry or claim external approval. Preserve the existing promotion and release semantics."
+        allowed_files:
+          - open3d_artist/production.py
+          - tests/test_production_visual_qa.py
+          - tests/test_production_run.py
+          - tests/test_production_catalog.py
+          - skills/open3d-production-asset/SKILL.md
+        verify:
+          - "command -v convert"
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa"
+          - "for brief in examples/production-qualification/brief.json examples/production-qualification/brief-watering-can.json examples/production-qualification/brief-wood-crate.json; do run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief \"$brief\" --output \"$run_dir\"; python3 -m open3d_artist validate \"$run_dir\"; test -f \"$run_dir/reference_manifest.json\"; python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); v=m[\"visual_qa\"]; r=m[\"repair\"]; assert v[\"scope\"] == \"PACK_PENDING_FULL_6_VIEW\"; assert r[\"max_attempts\"] == 3; assert m[\"approval\"] == \"LOCAL_ONLY_NOT_APPROVED\"' \"$run_dir/reference_manifest.json\"; done"
+          - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief-watering-can.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist production-release-verify \"$project_dir\""
+          - "npm run build --prefix web"
+          - "python3 -m compileall -q open3d_artist tests"
+          - "git diff --check"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Image rasterization requires network access, provider credentials, Unity, arbitrary commands, or fabricated scores."
+          - "The comparison accepts unchecked paths, symlinks, arbitrary ImageMagick arguments, or unbounded image sizes."
+          - "The manifest compares fewer than the HERO reference/candidate pair while claiming full six-view visual approval."
+          - "Repair attempts exceed three, mutate geometry, discard BEST_VERSION, or lack rollback metadata."
+          - "Local visual results change external_visual_qa, Unity, promotion, or approval to PASS/APPROVED."
+          - "Verification fails twice without a clear local fix."
+        deferred_work:
+          - "Independent external reference generation and fresh six-view visual QA."
+          - "Actual geometry-changing repair execution and rollback selection."
+          - "Codex/Claude process invocation receipts."
+          - "Unity/provider integration, broader xFarm-quality asset catalog, and final production-release proof."
+        missing_evidence:
+          - "No external numeric visual-QA evidence exists."
+          - "No actual repair execution or BEST_VERSION artifact exists."
+          - "No locally verifiable Codex or Claude process receipt exists."
+          - "Unity validation, provider output, broader asset quality, and final approved release remain unproven."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "One Worker owns the shared production runtime and QA tests; no concurrent write scope is proven."
+      blocked_tasks: []
+      missing_evidence:
+        - "External reference generation and visual QA remain unavailable."
+        - "Actual bounded geometry repair is not yet implemented."
+        - "Codex/Claude process receipts and Unity/provider evidence are absent."
+        - "The original approved high-quality release oracle remains incomplete."
+      required_board_updates:
+        - "Create and activate T013 with worker_package copied verbatim."
+        - "Preserve one active task and keep T999 queued."
+        - "Require commit and push after verification; stage only allowed files."
+        - "Do not claim full outcome completion after this package."
+  - id: T013
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Add deterministic local visual QA to every checked-in production run by rasterizing the checked-in SVG reference and HERO_3Q candidate with a fixed native ImageMagick command, computing a reproducible similarity report, and emitting explicit matched/mismatched components, next action, and PACK_PENDING_FULL_6_VIEW scope. Add a bounded repair-state receipt with max three attempts, BEST_VERSION/rollback metadata, and truthful UNAVAILABLE_REPAIR_REQUIRED behavior; do not mutate geometry or claim external approval. Preserve the existing promotion and release semantics."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "tests/test_production_visual_qa.py"
+      - "tests/test_production_run.py"
+      - "tests/test_production_catalog.py"
+      - "skills/open3d-production-asset/SKILL.md"
+    verify:
+      - "command -v convert"
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa"
+      - "for brief in examples/production-qualification/brief.json examples/production-qualification/brief-watering-can.json examples/production-qualification/brief-wood-crate.json; do run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief \"$brief\" --output \"$run_dir\"; python3 -m open3d_artist validate \"$run_dir\"; test -f \"$run_dir/reference_manifest.json\"; python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); v=m[\"visual_qa\"]; r=m[\"repair\"]; assert v[\"scope\"] == \"PACK_PENDING_FULL_6_VIEW\"; assert r[\"max_attempts\"] == 3; assert m[\"approval\"] == \"LOCAL_ONLY_NOT_APPROVED\"' \"$run_dir/reference_manifest.json\"; done"
+      - "run_dir=\"$(mktemp -d)\"; project_dir=\"$(mktemp -d)/project\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief-watering-can.json --output \"$run_dir\"; python3 -m open3d_artist production-promote --run \"$run_dir\" --project \"$project_dir\"; python3 -m open3d_artist production-release-verify \"$project_dir\""
+      - "npm run build --prefix web"
+      - "python3 -m compileall -q open3d_artist tests"
+      - "git diff --check"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "Image rasterization requires network access, provider credentials, Unity, arbitrary commands, or fabricated scores."
+      - "The comparison accepts unchecked paths, symlinks, arbitrary ImageMagick arguments, or unbounded image sizes."
+      - "The manifest compares fewer than the HERO reference/candidate pair while claiming full six-view visual approval."
+      - "Repair attempts exceed three, mutate geometry, discard BEST_VERSION, or lack rollback metadata."
+      - "Local visual results change external_visual_qa, Unity, promotion, or approval to PASS/APPROVED."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - tests/test_production_visual_qa.py
+        - tests/test_production_run.py
+        - tests/test_production_catalog.py
+        - skills/open3d-production-asset/SKILL.md
+      commands:
+        - cmd: "command -v convert"
+          status: pass
+        - cmd: "production tests"
+          status: pass
+        - cmd: "catalog production runs"
+          status: pass
+        - cmd: "promotion and release verification"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added fixed bounded ImageMagick rasterization and deterministic HERO_3Q similarity evidence, explicit components/actions/scope, and truthful capped repair metadata with rollback/BEST_VERSION. Promotion and release semantics remain local-only and unapproved."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T014
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review deterministic visual QA and select the next largest safe package for agent execution receipts, real provider/Unity adapters, or final release evidence."
+    inputs:
+      - "T001 through T013 receipts"
+      - "Current visual QA manifests and release artifacts"
+      - "Codex/Claude and xFarm workflow conventions"
+    constraints:
+      - "Read-only; do not implement."
+      - "Do not call unavailable external services or claim their results."
+      - "Select one bounded package with a locally verifiable completion proof."
     expected_output:
       - "Phase decision and rationale"
       - "Exact next Worker objective"

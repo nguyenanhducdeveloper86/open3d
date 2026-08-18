@@ -20,6 +20,12 @@ class ProductionCatalogTest(unittest.TestCase):
                 self.assertEqual([item["role"] for item in manifest["attachments"][:2]], ["REFERENCE_SAMPLE", "CANDIDATE"])
                 self.assertEqual([item["view"] for item in manifest["attachments"][1:]], REQUIRED_VIEWS)
                 self.assertEqual(manifest["visual_qa"]["status"], "UNAVAILABLE_REPAIR_REQUIRED")
+                self.assertEqual(manifest["visual_qa"]["scope"], "PACK_PENDING_FULL_6_VIEW")
+                self.assertTrue(manifest["visual_qa"]["matched_components"])
+                self.assertIn("next_action", manifest["visual_qa"])
+                self.assertEqual(manifest["repair"]["max_attempts"], 3)
+                self.assertEqual(manifest["repair"]["attempts"], 0)
+                self.assertEqual(manifest["repair"]["BEST_VERSION"], "v001")
                 self.assertEqual(manifest["approval"], "LOCAL_ONLY_NOT_APPROVED")
 
     def test_unknown_catalog_recipe_is_rejected(self):
