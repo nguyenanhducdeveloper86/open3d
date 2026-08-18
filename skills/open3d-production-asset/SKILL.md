@@ -29,6 +29,21 @@ The HTTP equivalent is `POST /api/production/run` with `{"brief": <object>,
 These are local adapters; this package does not claim to execute an external
 Codex or Claude process.
 
+Record evidence from an installed Codex or Claude Code CLI without allowing
+edits:
+
+```sh
+python3 -m open3d_artist production-agent-receipt --agent codex --run "$RUN_DIR"
+python3 -m open3d_artist production-agent-receipt --agent claude --run "$RUN_DIR"
+```
+
+The bridge uses fixed non-interactive read-only/plan argv, bounded timeout and
+output, and writes only `agent_process_receipt.json`. Missing, unauthenticated,
+or failed CLIs are recorded as `UNAVAILABLE` or `FAILED`; agent text cannot
+change geometry, QA, promotion, approval, signing, or release state. A `PASS`
+requires a parsed structured agent receipt tied to the exact production receipt
+digest.
+
 Promote a verified run with `production-promote --run <run> --project <project>`;
 the equivalent HTTP route is `/api/production/promote`, and MCP exposes typed
 `production.promote` and `production.release_verify`. Promotion copies the

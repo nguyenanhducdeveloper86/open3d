@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T014
+active_task: T016
 
 tasks:
   - id: T001
@@ -902,7 +902,7 @@ tasks:
   - id: T014
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review deterministic visual QA and select the next largest safe package for agent execution receipts, real provider/Unity adapters, or final release evidence."
     inputs:
@@ -913,6 +913,134 @@ tasks:
       - "Read-only; do not implement."
       - "Do not call unavailable external services or claim their results."
       - "Select one bounded package with a locally verifiable completion proof."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T013 is green and truthful, but QA remains local SVG-versus-HERO_3Q only, repair attempts are zero, and approval is LOCAL_ONLY_NOT_APPROVED. Codex/Claude support is documentation-only with no process receipt. Approve a concrete bridge using installed non-interactive read-only/plan modes, bounded process capture, structured receipt validation, and explicit unavailable/failed states. The existing three-asset catalog provides more leverage than another small fixture; richer xFarm families remain deferred."
+      evidence:
+        - "T013 receipt: commit 568d3c4; push recorded by 74a0880."
+        - "Fresh runs for all three catalog briefs report UNAVAILABLE_REPAIR_REQUIRED, PACK_PENDING_FULL_6_VIEW, repair attempts 0, and LOCAL_ONLY_NOT_APPROVED."
+        - "open3d_artist/production.py compares only the checked-in SVG against HERO_3Q."
+        - "skills/open3d-production-asset/SKILL.md explicitly documents, but does not execute, Codex or Claude."
+        - "codex and claude non-interactive help/version probes are available."
+        - "GoalBuddy checker reports active T014 with no state errors."
+      worker_package:
+        objective: "Implement a locally verifiable Codex/Claude Code execution bridge for a completed production run. Add a production-agent-receipt operation accepting only codex or claude, invoke the selected CLI in non-interactive read-only/plan mode, capture bounded argv metadata, executable/version, timing, exit status, output, and parsed structured agent receipt, and write agent_process_receipt.json linked to the production receipt digest. Expose equivalent CLI, HTTP, and typed MCP operations. Missing or unauthenticated CLIs must produce explicit UNAVAILABLE or FAILED receipts and never alter geometry, QA, promotion, or approval state."
+        allowed_files:
+          - open3d_artist/agent_bridge.py
+          - open3d_artist/production.py
+          - open3d_artist/cli.py
+          - open3d_artist/server.py
+          - open3d_artist/mcp.py
+          - tests/test_production_agent_receipt.py
+          - skills/open3d-production-asset/SKILL.md
+          - skills/open3d-production-asset/agents/openai.yaml
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt"
+          - "command -v codex && codex --version && command -v claude && claude --version"
+          - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m unittest -v tests.test_production_agent_receipt"
+          - "git diff --check"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "The bridge accepts arbitrary executable paths, shell strings, write-capable modes, unrestricted run paths, or unbounded prompt/output sizes."
+          - "Codex or Claude runs without read-only/plan permissions, or the receipt cannot be tied to the exact production receipt digest."
+          - "Missing or unauthenticated harnesses are represented as PASS or fabricated agent results."
+          - "Agent output can mutate geometry or claim external QA, Unity, provider, promotion, signing, or approval success."
+          - "CLI, HTTP, and MCP semantics diverge or permit arbitrary command execution."
+          - "Verification fails twice without a clear local fix."
+      deferred_work:
+        - "Independent external reference generation and fresh six-view external QA."
+        - "Actual geometry-changing repair execution and BEST_VERSION selection."
+        - "Unity and provider adapters."
+        - "Richer xFarm production recipes beyond the three local fixtures."
+        - "Successful authenticated Codex/Claude production receipts if local credentials are unavailable."
+        - "Final signed/promoted APPROVED release."
+      subgoal_contract: null
+      blocked_tasks: []
+      missing_evidence:
+        - "No real Codex or Claude process receipt exists."
+        - "No independent external reference or fresh external six-view QA exists."
+        - "No geometry-changing repair artifact exists."
+        - "Unity/provider evidence and richer xFarm-quality catalog evidence are absent."
+        - "Final signed/promoted approval remains unproven and must stay truthful."
+      required_board_updates:
+        - "Mark T014 done with this receipt."
+        - "Create and activate T015 as a Worker using worker_package verbatim."
+        - "Keep the goal active and T999 queued; do not claim completion."
+  - id: T015
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement a locally verifiable Codex/Claude Code execution bridge for a completed production run. Add a production-agent-receipt operation accepting only codex or claude, invoke the selected CLI in non-interactive read-only/plan mode, capture bounded argv metadata, executable/version, timing, exit status, output, and parsed structured agent receipt, and write agent_process_receipt.json linked to the production receipt digest. Expose equivalent CLI, HTTP, and typed MCP operations. Missing or unauthenticated CLIs must produce explicit UNAVAILABLE or FAILED receipts and never alter geometry, QA, promotion, or approval state."
+    allowed_files:
+      - "open3d_artist/agent_bridge.py"
+      - "open3d_artist/production.py"
+      - "open3d_artist/cli.py"
+      - "open3d_artist/server.py"
+      - "open3d_artist/mcp.py"
+      - "tests/test_production_agent_receipt.py"
+      - "skills/open3d-production-asset/SKILL.md"
+      - "skills/open3d-production-asset/agents/openai.yaml"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt"
+      - "command -v codex && codex --version && command -v claude && claude --version"
+      - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m unittest -v tests.test_production_agent_receipt"
+      - "git diff --check"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "The bridge accepts arbitrary executable paths, shell strings, write-capable modes, unrestricted run paths, or unbounded prompt/output sizes."
+      - "Codex or Claude runs without read-only/plan permissions, or the receipt cannot be tied to the exact production receipt digest."
+      - "Missing or unauthenticated harnesses are represented as PASS or fabricated agent results."
+      - "Agent output can mutate geometry or claim external QA, Unity, provider, promotion, signing, or approval success."
+      - "CLI, HTTP, and MCP semantics diverge or permit arbitrary command execution."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/agent_bridge.py
+        - open3d_artist/production.py
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - tests/test_production_agent_receipt.py
+        - skills/open3d-production-asset/SKILL.md
+        - skills/open3d-production-asset/agents/openai.yaml
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt"
+          status: pass
+        - cmd: "command -v codex && codex --version && command -v claude && claude --version"
+          status: pass
+        - cmd: "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m unittest -v tests.test_production_agent_receipt"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented bounded, fixed-argv Codex/Claude read-only bridge with CLI, HTTP, and typed MCP operations. Receipts capture executable/version, timing, status, bounded output, structured agent evidence, and exact production receipt digest. Unsafe paths, unsupported agents, missing/failed CLIs, oversized output, and digest mismatches are covered by tests. Agent output cannot mutate production state."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
+  - id: T016
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the Codex/Claude bridge and select the next package for successful agent proof, richer xFarm recipes, external QA/provider/Unity integration, or final release audit."
+    inputs:
+      - "T001 through T015 receipts"
+      - "Current agent_process_receipt artifacts and tests"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "Distinguish installed CLI availability from authenticated successful execution."
+      - "Do not claim full completion while external QA, Unity, richer asset quality, or final release proof is absent."
     expected_output:
       - "Phase decision and rationale"
       - "Exact next Worker objective"

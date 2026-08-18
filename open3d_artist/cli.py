@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .mcp import serve_stdio
 from .providers import MeshyImageTo3D, ProviderError, provider_catalog
-from .production import promote_production, run_production, verify_release
+from .production import promote_production, production_agent_receipt, run_production, verify_release
 from .project import Project, ProjectError
 from .server import serve
 from .unity import UnityValidator
@@ -90,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("--project", required=True, type=Path)
     release = commands.add_parser("production-release-verify", help="verify promoted release artifacts")
     release.add_argument("project", type=Path)
+    agent = commands.add_parser("production-agent-receipt", help="record a read-only Codex or Claude run receipt")
+    agent.add_argument("--agent", choices=("codex", "claude"), required=True)
+    agent.add_argument("--run", required=True, type=Path)
+    agent.add_argument("--output-root", type=Path)
+    agent.add_argument("--timeout", type=float, default=30)
     return parser
 
 
@@ -114,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             value = verify_release(Project(args.project))
             _json(value)
             return 0 if value["status"] == "PASS" else 1
+        if args.command == "production-agent-receipt":
+            _json(production_agent_receipt(args.agent, args.run, output_root=args.output_root, timeout=args.timeout))
+            return 0
         if args.command == "unity-validate":
             value = UnityValidator(args.unity_project, unity=args.unity).run(args.input_asset, args.output, timeout=args.timeout)
             _json(value)

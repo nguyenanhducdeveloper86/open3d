@@ -298,3 +298,8 @@ def production_state(project: Project) -> dict[str, Any]:
     current = project.current()
     artifacts = current.get("production_artifacts", {})
     return {"receipt": receipt, "run_receipt": receipt, "promotion": _read(root / "promotion.json"), "release": _read(root / "release.json") if (root / "release.json").is_file() else receipt.get("release", {}), "release_verification": verify_release(project), "renders": {view: f"/api/production/render/{view}" for view in REQUIRED_VIEWS if view in artifacts.get("renders", {})}, "adapters": receipt.get("adapter_availability", {}), "validation": project.validate(), "current": current, "viewer": {"route": "/", "artifact_route": "/api/artifact/current"}}
+
+
+def production_agent_receipt(agent: str, run: str | Path, **kwargs: Any) -> dict[str, Any]:
+    from .agent_bridge import run_production_agent
+    return run_production_agent(agent, run, **kwargs)

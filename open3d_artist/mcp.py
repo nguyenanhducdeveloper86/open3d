@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from .project import Project, ProjectError
-from .production import catalog, promote_production, production_state, run_production, verify_release
+from .production import catalog, promote_production, production_agent_receipt, production_state, run_production, verify_release
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -29,6 +29,7 @@ TOOLS = [
     _tool("production.run", "Run a checked-in local production brief.", {"brief": {"type": "object", "additionalProperties": False, "properties": {"schema_version": {"type": "string", "const": "0.1.0"}, "brief_id": {"type": "string"}, "prompt": {"type": "string"}, "reference": {"type": "object"}, "recipe_id": {"type": "string", "enum": [entry["recipe_id"] for entry in catalog()]}, "views": {"type": "array", "items": {"type": "string"}}}, "required": ["brief_id", "prompt", "reference", "recipe_id", "views"]}, "output": {"type": "string"}}, ["brief", "output"]),
     _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
     _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
+    _tool("production.agent_receipt", "Run a fixed read-only Codex or Claude review and record evidence.", {"agent": {"type": "string", "enum": ["codex", "claude"]}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
 ]
 
 
@@ -52,6 +53,8 @@ def _call(project: Project, name: str, args: dict[str, Any]) -> dict[str, Any]:
         return promote_production(args["run"], project.root)
     if name == "production.release_verify":
         return {"state": production_state(project), "verification": verify_release(project)}
+    if name == "production.agent_receipt":
+        return production_agent_receipt(args["agent"], args["run"], output_root=args.get("output_root"))
     raise ProjectError(f"unknown tool: {name}")
 
 

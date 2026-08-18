@@ -1,0 +1,39 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T015",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "changed_files": [
+      "open3d_artist/agent_bridge.py",
+      "open3d_artist/production.py",
+      "open3d_artist/cli.py",
+      "open3d_artist/server.py",
+      "open3d_artist/mcp.py",
+      "tests/test_production_agent_receipt.py",
+      "skills/open3d-production-asset/SKILL.md",
+      "skills/open3d-production-asset/agents/openai.yaml"
+    ],
+    "commands": [
+      {
+        "cmd": "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt",
+        "status": "pass"
+      },
+      {
+        "cmd": "command -v codex && codex --version && command -v claude && claude --version",
+        "status": "pass"
+      },
+      {
+        "cmd": "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\" && python3 -m unittest -v tests.test_production_agent_receipt",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "summary": "Implemented bounded, fixed-argv Codex/Claude read-only bridge with CLI, HTTP, and typed MCP operations. Receipts capture executable/version, timing, status, bounded output, structured agent evidence, and exact production receipt digest. Unsafe paths, unsupported agents, missing/failed CLIs, oversized output, and digest mismatches are covered by tests. Agent output cannot mutate production state.",
+    "remaining_blockers": [],
+    "verification_attempts": 2,
+    "stopped_because": null
+  }
+}
