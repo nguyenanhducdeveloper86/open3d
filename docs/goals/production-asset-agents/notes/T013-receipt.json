@@ -41,6 +41,8 @@
       }
     ],
     "summary": "Added fixed bounded ImageMagick rasterization and deterministic HERO_3Q similarity evidence, explicit components/actions/scope, and truthful capped repair metadata with rollback/BEST_VERSION. Promotion and release semantics remain local-only and unapproved.",
+    "commit": "568d3c4",
+    "pushed_to": "origin/main",
     "remaining_blockers": [],
     "verification_attempts": 2,
     "stopped_because": null
