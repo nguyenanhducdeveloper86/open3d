@@ -32,6 +32,8 @@
       }
     ],
     "summary": "Implemented bounded, fixed-argv Codex/Claude read-only bridge with CLI, HTTP, and typed MCP operations. Receipts capture executable/version, timing, status, bounded output, structured agent evidence, and exact production receipt digest. Unsafe paths, unsupported agents, missing/failed CLIs, oversized output, and digest mismatches are covered by tests. Agent output cannot mutate production state.",
+    "commit": "856f116",
+    "pushed_to": "origin/main",
     "remaining_blockers": [],
     "verification_attempts": 2,
     "stopped_because": null
