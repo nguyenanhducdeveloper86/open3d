@@ -1,0 +1,41 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T023",
+    "changed_files": [
+      ".github/workflows/ci.yml"
+    ],
+    "summary": "Kept production execution network-denied through bubblewrap while making CI compatible with the hosted Ubuntu runner: temporary root privilege for the test harness, no-bytecode test execution, reachable Ubuntu mirror configuration, bounded apt commands, Blender/ImageMagick/font/bubblewrap/libEGL runtime installation, and runtime probes.",
+    "commands": [
+      {
+        "cmd": "GitHub Actions run 32275835309",
+        "status": "pass",
+        "result": "runtime install, 19-test unittest suite, compileall, viewer build, and clean-room example all passed"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s tests -v",
+        "status": "pass",
+        "result": "19 tests passed, 1 optional JSON Schema test skipped locally"
+      },
+      {
+        "cmd": "npm run build --prefix web",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "remote_run": {
+      "id": 32275835309,
+      "sha": "aa4e4f2e9a5e4549e55320bb2080bd25885c1a58",
+      "url": "https://github.com/nguyenanhducdeveloper86/open3d/actions/runs/32275835309",
+      "conclusion": "success"
+    },
+    "verification_attempts": 4,
+    "remaining_blockers": [
+      "The original production oracle is still broader than CI: external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level viewer proof, and approved signed release metadata remain incomplete.",
+      "The final audit reported a watering-can catalog dimensions validation failure that still needs resolution."
+    ]
+  }
+}

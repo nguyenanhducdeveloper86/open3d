@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T023
+active_task: T024
 
 tasks:
   - id: T001
@@ -1472,7 +1472,7 @@ tasks:
   - id: T023
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Make the GitHub Actions production test step run the existing network-denied bubblewrap sandbox with the hosted runner privileges it requires, then verify the exact full suite, compile, viewer build, and clean-room checks. Do not weaken production execution to unsafe mode."
     allowed_files:
@@ -1488,6 +1488,50 @@ tasks:
       - "The hosted runner still rejects bubblewrap namespace creation."
       - "Any product source, test, fixture, or release artifact needs modification."
       - "Do not claim the production oracle complete from a green CI run alone."
+    receipt:
+      result: done
+      changed_files:
+        - .github/workflows/ci.yml
+      summary: "Kept production execution network-denied through bubblewrap while making CI compatible with the hosted Ubuntu runner: temporary root privilege for the test harness, no-bytecode test execution, reachable Ubuntu mirror configuration, bounded apt commands, Blender/ImageMagick/font/bubblewrap/libEGL runtime installation, and runtime probes."
+      commands:
+        - cmd: "GitHub Actions run 32275835309"
+          status: pass
+          result: "runtime install, 19-test unittest suite, compileall, viewer build, and clean-room example all passed"
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 tests passed, 1 optional JSON Schema test skipped locally"
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      remote_run:
+        id: 32275835309
+        sha: aa4e4f2e9a5e4549e55320bb2080bd25885c1a58
+        url: "https://github.com/nguyenanhducdeveloper86/open3d/actions/runs/32275835309"
+        conclusion: success
+      verification_attempts: 4
+      remaining_blockers:
+        - "The original production oracle is still broader than CI: external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level viewer proof, and approved signed release metadata remain incomplete."
+        - "The final audit reported a watering-can catalog dimensions validation failure that still needs resolution."
+  - id: T024
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Run the final truthful audit after the green hosted CI run. Verify the remaining catalog, agent, external QA, viewer, and signed-release gates against the original oracle; do not mark complete unless every required gate is evidenced."
+    inputs:
+      - "T001 through T023 receipts"
+      - "GitHub Actions run 32275835309"
+      - "Current repository and dirty worktree"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "A green CI run proves runtime compatibility, not external approval or xFarm-quality parity."
+      - "Keep the goal active and incomplete when any required gate is unavailable, failed, or unverified."
+    expected_output:
+      - "complete | not_complete"
+      - "Exact evidence and remaining blockers"
+      - "Next largest safe Worker slice if not complete"
     receipt: null
 
 checks:
