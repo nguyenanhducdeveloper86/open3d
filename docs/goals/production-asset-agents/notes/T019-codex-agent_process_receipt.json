@@ -1,0 +1,20 @@
+{
+  "agent": "codex",
+  "agent_receipt": null,
+  "argv": ["exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "-"],
+  "duration_seconds": 14.57082,
+  "ended_at": 1787138389.020999,
+  "executable": "/opt/homebrew/bin/codex",
+  "exit_status": 0,
+  "mutations": "NONE",
+  "production_receipt_digest": "sha256:e8e27761312e834e6679f37fb72c5b49181b79b79d42b80efddd256b670f84d3",
+  "production_state_unchanged": true,
+  "reason": "STRUCTURED_RECEIPT_MISSING",
+  "run": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/run",
+  "schema_version": "0.1.0",
+  "started_at": 1787138374.450179,
+  "status": "UNAVAILABLE",
+  "stderr": "OpenAI Codex v0.147.0; approval: never; sandbox: read-only",
+  "stdout": "Unable to inspect run_receipt.json: the available filesystem access requires running a command, which you explicitly prohibited. I did not access or modify files and cannot produce an evidence-backed agent receipt or validate linkage.",
+  "version": "codex-cli 0.147.0"
+}

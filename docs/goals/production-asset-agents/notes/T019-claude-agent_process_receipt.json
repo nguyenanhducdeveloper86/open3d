@@ -1,0 +1,20 @@
+{
+  "agent": "claude",
+  "agent_receipt": null,
+  "argv": ["-p", "--bare", "--no-session-persistence", "--permission-mode", "plan", "--disallowed-tools", "Edit,Write,NotebookEdit,Bash", "--output-format", "json"],
+  "duration_seconds": 30.08651,
+  "ended_at": 1787138449.863167,
+  "executable": "/Users/ducna/.local/bin/claude",
+  "exit_status": null,
+  "mutations": "NONE",
+  "production_receipt_digest": "sha256:e8e27761312e834e6679f37fb72c5b49181b79b79d42b80efddd256b670f84d3",
+  "production_state_unchanged": true,
+  "reason": "CLI_TIMEOUT",
+  "run": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/run",
+  "schema_version": "0.1.0",
+  "started_at": 1787138419.7766569,
+  "status": "FAILED",
+  "stderr": "",
+  "stdout": "",
+  "version": "2.1.196 (Claude Code)"
+}

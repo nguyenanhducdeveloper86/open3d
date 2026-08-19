@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T018
+active_task: T020
 
 tasks:
   - id: T001
@@ -1167,7 +1167,7 @@ tasks:
   - id: T018
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Audit deterministic repair and decide whether to pursue final authenticated agent/availability proof, external gates, richer recipes, or final goal audit."
     inputs:
@@ -1181,6 +1181,129 @@ tasks:
     expected_output:
       - "Phase decision and rationale"
       - "Exact next Worker objective or final-audit recommendation"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T017 proves substantial local capability: deterministic repair, six regenerated views, changed digests, bounded attempts, release metadata, and truthful non-approval. The original oracle remains unproved: no real authenticated Codex/Claude receipt, independent external six-view QA, Unity/provider evidence, richer production catalog, or APPROVED signed release. Approve a bounded real-agent smoke package next; do not run the final audit yet."
+      evidence:
+        - "T017 receipt and commits c33f35f and 7f2ca74 are pushed."
+        - "Repair tests, full production tests, and Vite build passed."
+        - "agent_bridge.py is tested only with fake runners and negative cases; no successful real process receipt is saved."
+        - "Current manifests remain LOCAL_ONLY_NOT_APPROVED with external visual QA and Unity UNAVAILABLE."
+        - "T999 remains queued and the worktree has unrelated untracked files."
+      parallel_safety:
+        safe: true
+        reason: "T019 should be the sole write-capable task and writes only its explicitly named receipt artifacts."
+      missing_evidence:
+        - "Authenticated successful Codex and Claude process receipts from a real production run."
+        - "Independent external reference generation and fresh six-view external QA."
+        - "Unity or real provider output."
+        - "Richer xFarm-quality recipes beyond the three fixtures."
+        - "Final signed/promoted APPROVED state."
+        - "Executable repair rollback proof; T017 records rollback metadata and prior digests but does not preserve a separately restorable v001 artifact."
+      required_board_updates:
+        - "Create and activate T019 as the sole Worker."
+        - "Keep T999 queued and do not claim completion."
+  - id: T019
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Run a fresh sandboxed production fixture, execute fixture-repair-v1, validate and promote it, then invoke the existing fixed read-only bridge with the real Codex and Claude CLIs. Save the generated agent_process_receipt.json for each agent and a concise smoke summary. Preserve truthful UNAVAILABLE or FAILED results when authentication or execution is unavailable; never modify product code or claim approval."
+    allowed_files:
+      - "docs/goals/production-asset-agents/notes/T019-receipt.json"
+      - "docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json"
+      - "docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json"
+    verify:
+      - "run_root=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_root/run\""
+      - "python3 -m open3d_artist production-repair --run \"$run_root/run\" --repair-id fixture-repair-v1; python3 -m open3d_artist validate \"$run_root/run\""
+      - "for agent in codex claude; do python3 -m open3d_artist production-agent-receipt --agent \"$agent\" --run \"$run_root/run\" --output-root \"$run_root\"; done"
+      - "python3 -m open3d_artist production-promote --run \"$run_root/run\" --project \"$run_root/project\"; python3 -m open3d_artist production-release-verify \"$run_root/project\""
+      - "Assert each saved receipt contains agent, production_receipt_digest, status, argv, version, exit_status, mutations=NONE, and production_state_unchanged=true; record PASS only for a real structured receipt with the exact digest."
+    stop_if:
+      - "Any CLI requests write-capable permissions, unrestricted shell access, or unbounded execution."
+      - "Authentication is unavailable, the CLI times out, or execution fails; record the truthful status and stop that agent."
+      - "The bridge mutates geometry or changes QA, promotion, approval, signing, provider, Unity, or release state."
+      - "Any product-file change is required."
+      - "Do not mark the goal complete if either successful receipt or the external oracle gates remain absent."
+    receipt:
+      result: done
+      changed_files:
+        - docs/goals/production-asset-agents/notes/T019-receipt.json
+        - docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json
+        - docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json
+      commands:
+        - cmd: production-run
+          status: pass
+        - cmd: "production-repair; validate"
+          status: pass
+        - cmd: "production-agent-receipt codex"
+          status: pass
+        - cmd: "production-agent-receipt claude"
+          status: pass
+        - cmd: "production-promote; production-release-verify"
+          status: pass
+        - cmd: "receipt field validation"
+          status: pass
+      summary: "Fresh lantern run, repair, validation, promotion, and release verification passed. Codex is truthfully UNAVAILABLE due to missing structured receipt; Claude is FAILED due to timeout. Both receipts preserve required fields, mutations=NONE, and production_state_unchanged=true. Overall goal remains incomplete."
+      verification_attempts: 1
+      stopped_because: null
+      run_root: /private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW
+      run_path: /private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/run
+      project_path: /private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/project
+      statuses:
+        production_run: PASS
+        repair: PASS
+        validate: PASS
+        codex: UNAVAILABLE
+        claude: FAILED
+        promote: PASS
+        release_verify: PASS
+      production_receipt_digest: "sha256:e8e27761312e834e6679f37fb72c5b49181b79b79d42b80efddd256b670f84d3"
+      repair_id: fixture-repair-v1
+      repair_best_version: v002
+      repair_geometry_mutated: true
+      promotion_state: PROMOTED_LOCAL_NOT_APPROVED
+      release_approval: LOCAL_ONLY_NOT_APPROVED
+      external_visual_qa: UNAVAILABLE
+      unity: UNAVAILABLE
+      signature: UNAVAILABLE
+      agent_receipts:
+        codex: docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json
+        claude: docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json
+      production_state_unchanged_by_bridge:
+        codex: true
+        claude: true
+      mutations:
+        codex: NONE
+        claude: NONE
+      blockers:
+        - "Codex structured receipt missing; bridge recorded UNAVAILABLE."
+        - "Claude CLI timed out; bridge recorded FAILED."
+        - "External visual QA, Unity evidence, and signature unavailable; release remains LOCAL_ONLY_NOT_APPROVED."
+  - id: T020
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Audit the real-agent smoke evidence and decide whether the remaining external gates justify further local work or a final truthful completion audit."
+    inputs:
+      - "T001 through T019 receipts"
+      - "T019 Codex and Claude process receipts"
+      - "Full test/build verification and git history"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "Distinguish UNAVAILABLE/FAILED agent runs from successful authenticated receipts."
+      - "Do not complete the goal while required owner outcome evidence is absent."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective or final audit recommendation"
       - "allowed_files"
       - "verify"
       - "stop_if"

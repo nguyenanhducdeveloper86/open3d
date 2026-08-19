@@ -1,0 +1,59 @@
+{
+  "result": "done",
+  "task_id": "T019",
+  "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+  "changed_files": [
+    "docs/goals/production-asset-agents/notes/T019-receipt.json",
+    "docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json",
+    "docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json"
+  ],
+  "commands": [
+    {"cmd": "production-run", "status": "pass"},
+    {"cmd": "production-repair; validate", "status": "pass"},
+    {"cmd": "production-agent-receipt codex", "status": "pass"},
+    {"cmd": "production-agent-receipt claude", "status": "pass"},
+    {"cmd": "production-promote; production-release-verify", "status": "pass"},
+    {"cmd": "receipt field validation", "status": "pass"}
+  ],
+  "summary": "Fresh lantern run, repair, validation, promotion, and release verification passed. Codex is truthfully UNAVAILABLE due to missing structured receipt; Claude is FAILED due to timeout. Both receipts preserve required fields, mutations=NONE, and production_state_unchanged=true. Overall goal remains incomplete.",
+  "verification_attempts": 1,
+  "stopped_because": null,
+  "run_root": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW",
+  "run_path": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/run",
+  "project_path": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW/project",
+  "statuses": {
+    "production_run": "PASS",
+    "repair": "PASS",
+    "validate": "PASS",
+    "codex": "UNAVAILABLE",
+    "claude": "FAILED",
+    "promote": "PASS",
+    "release_verify": "PASS"
+  },
+  "production_receipt_digest": "sha256:e8e27761312e834e6679f37fb72c5b49181b79b79d42b80efddd256b670f84d3",
+  "repair_id": "fixture-repair-v1",
+  "repair_best_version": "v002",
+  "repair_geometry_mutated": true,
+  "promotion_state": "PROMOTED_LOCAL_NOT_APPROVED",
+  "release_approval": "LOCAL_ONLY_NOT_APPROVED",
+  "external_visual_qa": "UNAVAILABLE",
+  "unity": "UNAVAILABLE",
+  "signature": "UNAVAILABLE",
+  "agent_receipts": {
+    "codex": "docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json",
+    "claude": "docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json"
+  },
+  "production_state_unchanged_by_bridge": {
+    "codex": true,
+    "claude": true
+  },
+  "mutations": {
+    "codex": "NONE",
+    "claude": "NONE"
+  },
+  "blockers": [
+    "Codex structured receipt missing; bridge recorded UNAVAILABLE.",
+    "Claude CLI timed out; bridge recorded FAILED.",
+    "External visual QA, Unity evidence, and signature unavailable; release remains LOCAL_ONLY_NOT_APPROVED."
+  ]
+}

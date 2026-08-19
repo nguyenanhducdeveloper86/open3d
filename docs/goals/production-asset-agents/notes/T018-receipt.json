@@ -1,0 +1,33 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T018",
+    "board_path": "/Users/ducna/Desktop/open3D/docs/goals/production-asset-agents/state.yaml",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "rationale": "T017 proves substantial local capability: deterministic repair, six regenerated views, changed digests, bounded attempts, release metadata, and truthful non-approval. The original oracle remains unproved: no real authenticated Codex/Claude receipt, independent external six-view QA, Unity/provider evidence, richer production catalog, or APPROVED signed release. Approve a bounded real-agent smoke package next; do not run the final audit yet.",
+    "evidence": [
+      "T017 receipt and commits c33f35f and 7f2ca74 are pushed.",
+      "Repair tests, full production tests, and Vite build passed.",
+      "agent_bridge.py is tested only with fake runners and negative cases; no successful real process receipt is saved.",
+      "Current manifests remain LOCAL_ONLY_NOT_APPROVED with external visual QA and Unity UNAVAILABLE.",
+      "T999 remains queued and the worktree has unrelated untracked files."
+    ],
+    "parallel_safety": {
+      "safe": true,
+      "reason": "T019 should be the sole write-capable task and writes only its explicitly named receipt artifacts."
+    },
+    "missing_evidence": [
+      "Authenticated successful Codex and Claude process receipts from a real production run.",
+      "Independent external reference generation and fresh six-view external QA.",
+      "Unity or real provider output.",
+      "Richer xFarm-quality recipes beyond the three fixtures.",
+      "Final signed/promoted APPROVED state.",
+      "Executable repair rollback proof; T017 records rollback metadata and prior digests but does not preserve a separately restorable v001 artifact."
+    ],
+    "required_board_updates": [
+      "Create and activate T019 as the sole Worker.",
+      "Keep T999 queued and do not claim completion."
+    ]
+  }
+}
