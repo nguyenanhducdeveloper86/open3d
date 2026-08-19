@@ -1,0 +1,36 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T026",
+    "decision": "not_complete",
+    "full_outcome_complete": false,
+    "rationale": "The watering-can correction and hosted CI are verified, but the full production oracle remains unproven. The remaining gates require external/authenticated evidence or explicit approval and must not be inferred from local technical PASS results.",
+    "evidence": [
+      "HEAD and origin/main are 18729af.",
+      "Catalog tests pass and the full local suite passes 19 tests with 1 optional schema test skipped.",
+      "GitHub Actions run 32277142353 is green at 18729af, including runtime installation, tests, compile, viewer build, and clean-room checks.",
+      "The production correction keeps the watering-can recipe within declared dimensions and the catalog test asserts PASS for every recipe.",
+      "Promotion/release remains PROMOTED_LOCAL_NOT_APPROVED / LOCAL_ONLY_NOT_APPROVED.",
+      "Codex is UNAVAILABLE/STRUCTURED_RECEIPT_MISSING; Claude is FAILED/CLI_TIMEOUT.",
+      "Viewer evidence is API/test-level only; no browser-load receipt exists."
+    ],
+    "missing_evidence": [
+      "Independent external six-view visual QA and approval.",
+      "Unity validation and authenticated provider evidence.",
+      "Successful structured Codex and Claude production receipts.",
+      "Browser-level viewer-load proof against the real built bundle.",
+      "Richer xFarm-fidelity evidence.",
+      "APPROVED signed release metadata and signature."
+    ],
+    "commands": [
+      {"cmd": "gh run view 32277142353", "status": "pass"},
+      {"cmd": "python3 -m unittest discover -s tests -v", "status": "pass", "result": "19 passed, 1 skipped"},
+      {"cmd": "python3 -m open3d_artist validate examples/watering-can", "status": "pass"},
+      {"cmd": "check-goal-state.mjs", "status": "pass"}
+    ],
+    "required_board_updates": [
+      "Keep the goal active and wait for explicit external/authenticated evidence or approval.",
+      "Do not mark complete from local tests, catalog PASS, or green CI alone."
+    ]
+  }
+}
