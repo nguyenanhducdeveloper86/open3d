@@ -51,7 +51,7 @@ receipt, blend, GLB, six renders, provenance, QA, evidence, and release proof
 into CAS, preserving a rollback checkpoint. `PROMOTED_LOCAL_NOT_APPROVED` is
 the only local promotion state: external visual QA and Unity remain unavailable.
 
-Safety boundary: prompts, local references, views, catalog recipe IDs, and reference digests are validated;
+Safety boundary: prompts, local references, views, catalog recipe IDs, repair IDs, and reference digests are validated;
 arbitrary paths, commands, Python, providers, network, Unity, and unsandboxed
 Blender execution are not permitted. External visual QA and Unity remain
 `UNAVAILABLE`; never promote a local receipt to approval.

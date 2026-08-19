@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import sys
@@ -24,7 +25,17 @@ def args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--recipe", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--repair-id")
     return parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
+
+
+def repaired_asset(recipe: dict) -> dict:
+    if recipe.get("repair_id") != "fixture-repair-v1":
+        raise ValueError("unsupported repair id")
+    asset = copy.deepcopy(recipe["asset"])
+    handle = next(item for item in asset["geometry"]["primitives"] if item["part_id"] == "handle")
+    handle["size"]["y"] = 0.54
+    return asset
 
 
 def material(name: str, color: str):
@@ -145,7 +156,14 @@ def write_project(output: Path, asset: dict, recipe: dict, glb: bytes) -> dict:
 def main() -> None:
     options = args()
     recipe = json.loads(options.recipe.read_text(encoding="utf-8"))
-    asset = recipe["asset"]
+    if options.repair_id is not None:
+        if options.repair_id != "fixture-repair-v1":
+            raise ValueError("unsupported repair id")
+        recipe = copy.deepcopy(recipe)
+        recipe["repair_id"] = options.repair_id
+        asset = repaired_asset(recipe)
+    else:
+        asset = recipe["asset"]
     output = options.output.resolve()
     build_scene(asset, recipe)
     scene = bpy.context.scene

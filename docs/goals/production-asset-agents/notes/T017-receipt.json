@@ -1,0 +1,39 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T017",
+    "board_path": "docs/goals/production-asset-agents/state.yaml",
+    "changed_files": [
+      "open3d_artist/production.py",
+      "open3d_artist/workers.py",
+      "open3d_artist/cli.py",
+      "open3d_artist/server.py",
+      "open3d_artist/mcp.py",
+      "tools/production_fixture/generate_fixture.py",
+      "tests/test_production_repair.py",
+      "skills/open3d-production-asset/SKILL.md"
+    ],
+    "commands": [
+      {
+        "cmd": "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt tests.test_production_repair",
+        "status": "pass"
+      },
+      {
+        "cmd": "production-run + production-repair + validate smoke command",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm run build --prefix web",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "summary": "Implemented allowlisted fixture-repair-v1 with sandboxed Blender regeneration, changed geometry digests, six views, QA, rollback metadata, attempt cap, and truthful approval. Exposed CLI, HTTP, and typed MCP surfaces with tests.",
+    "remaining_blockers": [],
+    "verification_attempts": 1,
+    "stopped_because": null
+  }
+}

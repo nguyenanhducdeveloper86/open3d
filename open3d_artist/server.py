@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from .project import Project, ProjectError
-from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, run_production, verify_release
+from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, repair_production, run_production, verify_release
 from .providers import ConsentRequired, MeshyImageTo3D, ProviderError, provider_catalog
 from .unity import UnityValidator
 from .workers import BlenderSandbox, WorkerError, WorkerUnavailable
@@ -126,6 +126,8 @@ class _Handler(BaseHTTPRequestHandler):
                     if destination != self.server.project.root:
                         raise ProjectError("HTTP promotion destination must be the served project")
                     value = promote_production(body["run"], destination)
+                elif path == "/api/production/repair":
+                    value = repair_production(body["run"], body["repair_id"], timeout=float(body.get("timeout", 300)))
                 elif path == "/api/production/agent-receipt":
                     value = production_agent_receipt(body["agent"], body["run"], output_root=body.get("output_root"), timeout=float(body.get("timeout", 30)))
                 else:

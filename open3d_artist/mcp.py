@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from .project import Project, ProjectError
-from .production import catalog, promote_production, production_agent_receipt, production_state, run_production, verify_release
+from .production import REPAIR_ID, catalog, promote_production, production_agent_receipt, production_state, repair_production, run_production, verify_release
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -28,6 +28,7 @@ TOOLS = [
     _tool("checkpoint.rollback", "Restore an exact prior checkpoint.", {"checkpoint_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}, ["checkpoint_id"]),
     _tool("production.run", "Run a checked-in local production brief.", {"brief": {"type": "object", "additionalProperties": False, "properties": {"schema_version": {"type": "string", "const": "0.1.0"}, "brief_id": {"type": "string"}, "prompt": {"type": "string"}, "reference": {"type": "object"}, "recipe_id": {"type": "string", "enum": [entry["recipe_id"] for entry in catalog()]}, "views": {"type": "array", "items": {"type": "string"}}}, "required": ["brief_id", "prompt", "reference", "recipe_id", "views"]}, "output": {"type": "string"}}, ["brief", "output"]),
     _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
+    _tool("production.repair", "Run the one fixed geometry-changing local repair.", {"run": {"type": "string"}, "repair_id": {"type": "string", "enum": [REPAIR_ID]}}, ["run", "repair_id"]),
     _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
     _tool("production.agent_receipt", "Run a fixed read-only Codex or Claude review and record evidence.", {"agent": {"type": "string", "enum": ["codex", "claude"]}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
 ]
@@ -51,6 +52,8 @@ def _call(project: Project, name: str, args: dict[str, Any]) -> dict[str, Any]:
         return run_production(args["brief"], args["output"])
     if name == "production.promote":
         return promote_production(args["run"], project.root)
+    if name == "production.repair":
+        return repair_production(args["run"], args["repair_id"])
     if name == "production.release_verify":
         return {"state": production_state(project), "verification": verify_release(project)}
     if name == "production.agent_receipt":

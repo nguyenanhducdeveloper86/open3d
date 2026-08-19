@@ -6,6 +6,7 @@ import json
 import hashlib
 import hmac
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "examples/production-qualification/catalog.json"
 FIXTURE = ROOT / "tools/production_fixture/generate_fixture.py"
 _RECIPE_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*-v[0-9]+$")
+REPAIR_ID = "fixture-repair-v1"
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -133,6 +135,54 @@ def run_production(brief: dict[str, Any], output: str | Path, *, timeout: float 
     receipt["release"] = release_metadata(receipt)
     (output_path / "run_receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return {"status": "PASS", "receipt": receipt, "run_receipt": receipt, "promotion": promotion, "validation": validation, "current": {"glb": current["glb_artifact"], "qa": current["qa_artifact"]}, "viewer": {"route": "/", "artifact_route": "/api/artifact/current"}}
+
+
+def repair_production(run: str | Path, repair_id: str, *, timeout: float = 300) -> dict[str, Any]:
+    if repair_id != REPAIR_ID:
+        raise ProjectError("unknown repair_id")
+    raw_root = Path(run)
+    if raw_root.is_symlink() or not raw_root.is_dir():
+        raise ProjectError("run must be a directory")
+    root = raw_root.resolve()
+    receipt = _read(root / "run_receipt.json")
+    if receipt.get("repair"):
+        raise ProjectError("repair attempt cap reached")
+    recipe_path, recipe = _recipe_for(receipt.get("recipe_id"))
+    asset_id = recipe["asset"]["asset_id"]
+    names = (f"{asset_id}.blend", f"{asset_id}.glb")
+    before = {name: digest_bytes((root / name).read_bytes()) for name in names}
+    stage = root / ".repair-attempt-1"
+    if stage.exists():
+        raise ProjectError("repair staging path already exists")
+    try:
+        worker = BlenderSandbox(ROOT).run_production_fixture(recipe_path, stage, timeout=timeout, repair_id=repair_id)
+        if worker["process"]["status"] != "PASS":
+            raise ProjectError(f"production repair failed: {worker['process']['output'][-1000:]}")
+        expected = list(names) + ["asset.yaml", "recipe.json", "project.json", "provenance.json", "qa.json", "evidence.json"] + [f"{view}.png" for view in REQUIRED_VIEWS]
+        if any(not (stage / name).is_file() or (stage / name).is_symlink() for name in expected):
+            raise ProjectError("production repair did not regenerate the complete fixture")
+        for name in expected:
+            shutil.copy2(stage / name, root / name)
+        shutil.rmtree(root / ".open3d", ignore_errors=True)
+        shutil.copytree(stage / ".open3d", root / ".open3d")
+        after = {name: digest_bytes((root / name).read_bytes()) for name in names}
+        if before == after:
+            raise ProjectError("production repair did not mutate geometry artifacts")
+        validation = Project(root).validate()
+        if validation["status"] != "PASS":
+            raise ProjectError("production repair technical QA failed")
+        repair = {"status": "PASS", "repair_id": repair_id, "attempts": 1, "max_attempts": 3, "BEST_VERSION": "v002", "best_version": "v002", "geometry_mutated": True, "before": before, "after": after, "rollback": {"available": True, "version": "v001", "geometry_mutated": False, "artifacts": before, "reason": "Restore the pre-repair artifact digests."}}
+        receipt["repair"] = repair
+        manifest = _reference_manifest(root, recipe)
+        manifest["repair"] = repair
+        receipt["reference_manifest"] = manifest
+        (root / "reference_manifest.json").write_bytes(canonical_json(manifest))
+        receipt["artifacts_manifest"] = _manifest(root, asset_id)
+        receipt["release"] = release_metadata({key: value for key, value in receipt.items() if key != "release"})
+        (root / "run_receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        return {"status": "PASS", "repair": repair, "validation": validation, "receipt": receipt}
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 def _manifest(root: Path, asset_id: str) -> dict[str, Any]:

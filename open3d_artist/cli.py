@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .mcp import serve_stdio
 from .providers import MeshyImageTo3D, ProviderError, provider_catalog
-from .production import promote_production, production_agent_receipt, run_production, verify_release
+from .production import promote_production, production_agent_receipt, repair_production, run_production, verify_release
 from .project import Project, ProjectError
 from .server import serve
 from .unity import UnityValidator
@@ -85,6 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     production.add_argument("--brief", required=True, type=Path)
     production.add_argument("--output", required=True, type=Path)
     production.add_argument("--timeout", type=float, default=300)
+    repair = commands.add_parser("production-repair", help="run the fixed local production repair")
+    repair.add_argument("--run", required=True, type=Path)
+    repair.add_argument("--repair-id", required=True)
+    repair.add_argument("--timeout", type=float, default=300)
     promote = commands.add_parser("production-promote", help="promote a verified local production run")
     promote.add_argument("--run", required=True, type=Path)
     promote.add_argument("--project", required=True, type=Path)
@@ -111,6 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "production-run":
             _json(run_production(json.loads(args.brief.read_text(encoding="utf-8")), args.output, timeout=args.timeout))
+            return 0
+        if args.command == "production-repair":
+            _json(repair_production(args.run, args.repair_id, timeout=args.timeout))
             return 0
         if args.command == "production-promote":
             _json(promote_production(args.run, args.project))

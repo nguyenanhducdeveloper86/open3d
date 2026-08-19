@@ -246,7 +246,7 @@ class BlenderSandbox:
                 response["artifact"] = self._store_glb(glb)
             return response
 
-    def run_production_fixture(self, recipe: Path, output: Path, *, timeout: float = 300) -> dict[str, Any]:
+    def run_production_fixture(self, recipe: Path, output: Path, *, timeout: float = 300, repair_id: str | None = None) -> dict[str, Any]:
         """Run the one checked-in qualification fixture with network denied."""
         self._blender_path()
         sandbox_kind = self._sandbox_kind()
@@ -261,9 +261,13 @@ class BlenderSandbox:
                 if runtime_path.exists():
                     command.extend(["--ro-bind", str(runtime_path), str(runtime_path)])
             command.extend(["--ro-bind", str(self.root), "/project", "--bind", str(output), "/output", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project", str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec", "--python", "/project/tools/production_fixture/generate_fixture.py", "--", "--recipe", recipe_arg, "--output", output_arg])
+            if repair_id is not None:
+                command.extend(["--repair-id", repair_id])
         else:
             profile = self._macos_profile(recipe.parent, output)
             command = [self.sandbox_exec, "-p", profile, str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec", "--python", str(self.root / "tools/production_fixture/generate_fixture.py"), "--", "--recipe", str(recipe), "--output", str(output)]
+            if repair_id is not None:
+                command.extend(["--repair-id", repair_id])
         result = run_limited(command, cwd=self.root, timeout=timeout, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output), "TMPDIR": "/tmp", "LANG": "C.UTF-8"})
         return {"sandbox": sandbox_kind, "process": {"status": result.status if result.status != "PASS" else ("PASS" if result.returncode == 0 else "FAIL"), "returncode": result.returncode, "duration_ms": result.duration_ms, "output": result.output}}
 

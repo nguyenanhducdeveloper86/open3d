@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T016
+active_task: T018
 
 tasks:
   - id: T001
@@ -1030,7 +1030,7 @@ tasks:
   - id: T016
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the Codex/Claude bridge and select the next package for successful agent proof, richer xFarm recipes, external QA/provider/Unity integration, or final release audit."
     inputs:
@@ -1044,6 +1044,143 @@ tasks:
     expected_output:
       - "Phase decision and rationale"
       - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred work and missing proof"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T015 proves the bounded bridge and installed CLI availability, but no authenticated production receipt is checked in. The local pipeline is substantial yet repair metadata never changes geometry; visual QA remains local SVG-versus-HERO only, and external gates remain unavailable. Approve one deterministic repair slice before final availability audit."
+      evidence:
+        - "T015 receipt and commits 856f116/ab8bd4c are pushed to origin/main."
+        - "Fresh full suite: 17 tests passed, 1 optional schema test skipped."
+        - "Fresh Vite build passed."
+        - "codex 0.147.0 and Claude Code 2.1.196 are installed."
+        - "No agent_process_receipt.json exists in the repository."
+        - "open3d_artist/production.py records repair attempts=0 and geometry_mutated=false."
+      worker_package:
+        objective: "Implement one bounded deterministic geometry-changing repair for a representative checked-in catalog asset. Use only an allowlisted repair plan, regenerate .blend/.glb and all six views in the existing sandbox, rerun technical QA, and record before/after digests, max-three attempts, BEST_VERSION, rollback metadata, and geometry_mutated=true. Preserve UNAVAILABLE external QA, Unity, promotion, and approval states. Expose the operation through CLI, HTTP, and typed MCP with regression coverage."
+        allowed_files:
+          - open3d_artist/production.py
+          - open3d_artist/workers.py
+          - open3d_artist/cli.py
+          - open3d_artist/server.py
+          - open3d_artist/mcp.py
+          - tools/production_fixture/generate_fixture.py
+          - tests/test_production_repair.py
+          - tests/test_production_run.py
+          - tests/test_production_release.py
+          - skills/open3d-production-asset/SKILL.md
+        verify:
+          - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt tests.test_production_repair"
+          - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\"; python3 -m open3d_artist production-repair --run \"$run_dir\" --repair-id fixture-repair-v1; python3 -m open3d_artist validate \"$run_dir\"; python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); r=m[\"repair\"]; assert r[\"geometry_mutated\"] is True and r[\"attempts\"] <= 3 and r[\"rollback\"][\"available\"]; assert m[\"approval\"] == \"LOCAL_ONLY_NOT_APPROVED\"' \"$run_dir/reference_manifest.json\""
+          - "npm run build --prefix web"
+          - "git diff --check"
+        stop_if:
+          - "Any required change falls outside allowed_files."
+          - "Repair accepts arbitrary paths, commands, code, unconstrained part IDs, or unsandboxed Blender execution."
+          - "The generated .blend/.glb does not differ from the pre-repair version or all six renders are not regenerated."
+          - "Attempts exceed three or BEST_VERSION/rollback metadata is absent."
+          - "External QA, Unity, promotion, or approval becomes PASS/APPROVED without evidence."
+          - "Verification fails twice without a clear local fix."
+      deferred_work:
+        - "Authenticated Codex/Claude production receipts."
+        - "Independent external references and fresh external six-view QA."
+        - "Unity/provider adapters."
+        - "Richer xFarm-quality recipes beyond three local fixtures."
+        - "Expansion of geometry repair across the catalog."
+        - "Final signed/promoted APPROVED release."
+      missing_evidence:
+        - "Real authenticated agent output linked to a production run."
+        - "Independent external reference and six-view QA evidence."
+        - "Actual geometry-changing repair artifact."
+        - "Unity/provider evidence."
+        - "Final signed APPROVED release proof."
+      exact_next_task:
+        id: T017
+        type: worker
+        objective: "Execute the approved deterministic repair package above."
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "The package owns the shared production runtime and fixture; no parallel Worker should run."
+      blocked_tasks: []
+      required_board_updates:
+        - "Record T016 as complete."
+        - "Create the next free Worker task with worker_package copied verbatim and preserve one active task."
+        - "Keep T999 queued and do not mark the goal complete."
+  - id: T017
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement one bounded deterministic geometry-changing repair for a representative checked-in catalog asset. Use only an allowlisted repair plan, regenerate .blend/.glb and all six views in the existing sandbox, rerun technical QA, and record before/after digests, max-three attempts, BEST_VERSION, rollback metadata, and geometry_mutated=true. Preserve UNAVAILABLE external QA, Unity, promotion, and approval states. Expose the operation through CLI, HTTP, and typed MCP with regression coverage."
+    allowed_files:
+      - "open3d_artist/production.py"
+      - "open3d_artist/workers.py"
+      - "open3d_artist/cli.py"
+      - "open3d_artist/server.py"
+      - "open3d_artist/mcp.py"
+      - "tools/production_fixture/generate_fixture.py"
+      - "tests/test_production_repair.py"
+      - "tests/test_production_run.py"
+      - "tests/test_production_release.py"
+      - "skills/open3d-production-asset/SKILL.md"
+    verify:
+      - "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt tests.test_production_repair"
+      - "run_dir=\"$(mktemp -d)\"; python3 -m open3d_artist production-run --brief examples/production-qualification/brief.json --output \"$run_dir\"; python3 -m open3d_artist production-repair --run \"$run_dir\" --repair-id fixture-repair-v1; python3 -m open3d_artist validate \"$run_dir\"; python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); r=m[\"repair\"]; assert r[\"geometry_mutated\"] is True and r[\"attempts\"] <= 3 and r[\"rollback\"][\"available\"]; assert m[\"approval\"] == \"LOCAL_ONLY_NOT_APPROVED\"' \"$run_dir/reference_manifest.json\""
+      - "npm run build --prefix web"
+      - "git diff --check"
+    stop_if:
+      - "Any required change falls outside allowed_files."
+      - "Repair accepts arbitrary paths, commands, code, unconstrained part IDs, or unsandboxed Blender execution."
+      - "The generated .blend/.glb does not differ from the pre-repair version or all six renders are not regenerated."
+      - "Attempts exceed three or BEST_VERSION/rollback metadata is absent."
+      - "External QA, Unity, promotion, or approval becomes PASS/APPROVED without evidence."
+      - "Verification fails twice without a clear local fix."
+    receipt:
+      result: done
+      changed_files:
+        - open3d_artist/production.py
+        - open3d_artist/workers.py
+        - open3d_artist/cli.py
+        - open3d_artist/server.py
+        - open3d_artist/mcp.py
+        - tools/production_fixture/generate_fixture.py
+        - tests/test_production_repair.py
+        - skills/open3d-production-asset/SKILL.md
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_fixture tests.test_production_run tests.test_production_release tests.test_production_catalog tests.test_production_visual_qa tests.test_production_agent_receipt tests.test_production_repair"
+          status: pass
+        - cmd: "production-run + production-repair + validate smoke command"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented allowlisted fixture-repair-v1 with sandboxed Blender regeneration, changed geometry digests, six views, QA, rollback metadata, attempt cap, and truthful approval. Exposed CLI, HTTP, and typed MCP surfaces with tests."
+      remaining_blockers: []
+      verification_attempts: 1
+      stopped_because: null
+  - id: T018
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Audit deterministic repair and decide whether to pursue final authenticated agent/availability proof, external gates, richer recipes, or final goal audit."
+    inputs:
+      - "T001 through T017 receipts"
+      - "Repair artifacts and full verification"
+      - "Original end-to-end goal oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "Separate local production capability from unavailable external approval."
+      - "Do not complete the goal without full oracle evidence."
+    expected_output:
+      - "Phase decision and rationale"
+      - "Exact next Worker objective or final-audit recommendation"
       - "allowed_files"
       - "verify"
       - "stop_if"
