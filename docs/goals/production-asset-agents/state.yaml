@@ -4,8 +4,8 @@ goal:
   title: "Open3D production asset agents"
   slug: "production-asset-agents"
   kind: open_ended
-  tranche: "Discover and complete successive safe verified slices until Open3D demonstrates the full production asset oracle."
-  status: active
+  tranche: "Public v0.1.0a1 signed-alpha distribution is complete; the broader production-asset oracle waits on external evidence."
+  status: blocked
   oracle:
     signal: "A checked-in fixture runs from prompt/reference through Blender generation, six-view QA, approval, viewer load, and signed artifact metadata, with Codex and Claude Code agent receipts."
     cadence: "after each Worker package and at final audit"
@@ -39,7 +39,7 @@ rules:
   no_completion_without_judge_or_pm_audit: true
   planning_is_not_completion: true
   queued_required_worker_blocks_completion: true
-  continuous_until_full_outcome: true
+  continuous_until_full_outcome: false
   missing_input_or_credentials_do_not_stop_goal: true
   exact_human_approval_can_terminal_wait: true
   preserve_and_validate_existing_plan: true
@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T030
+active_task: null
 
 tasks:
   - id: T001
@@ -1809,7 +1809,7 @@ tasks:
   - id: T030
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Finish the v0.1.0a1 app bundle and release smoke so its documented quick start and extracted production-run path are self-contained, then verify, commit, push, tag, publish, download, and validate the immutable GitHub prerelease and provenance."
     allowed_files:
@@ -1831,11 +1831,91 @@ tasks:
       - "A fix requires product files outside the already staged MCP regression and these allowed release files."
       - "GitHub permissions or attestation are unavailable."
       - "The release would imply production-asset APPROVED status."
-    receipt: null
+    receipt:
+      result: done
+      changed_files:
+        - ".github/workflows/release.yml"
+        - "README.md"
+        - "scripts/build_release.py"
+      commands:
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "20 tests passed, 1 optional skip"
+        - cmd: "python3 -m compileall -q open3d_artist tests && npm ci --prefix web && npm run build --prefix web"
+          status: pass
+        - cmd: "Build v0.1.0a1 twice and compare SHA256SUMS"
+          status: pass
+          result: "all release artifacts were reproducible"
+        - cmd: "Clean wheel CLI/MCP and extracted app production-run/API/HTML/GLB preflight"
+          status: pass
+        - cmd: "GitHub Actions CI 32283444612 and tag CI 32283792171"
+          status: pass
+        - cmd: "GitHub signed-release 32283792235"
+          status: pass
+          result: "tests, build, app production smoke, SLSA attestation, and prerelease publication passed"
+        - cmd: "Download v0.1.0a1 assets; verify SHA256SUMS, clean install, extracted production-run, and every attestation against release.yml, refs/tags/v0.1.0a1, and 21e328b6d41b83be1475221854ba9004cfd9ad80"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Published the public Open3D Artist v0.1.0a1 alpha prerelease from commit 21e328b. Six downloadable assets passed checksums, clean-wheel CLI/MCP, self-contained Blender production, viewer/API static smokes, and workflow-bound SLSA provenance verification. Release metadata truthfully remains LOCAL_ONLY_NOT_APPROVED for production assets."
+      external_evidence:
+        release_url: "https://github.com/nguyenanhducdeveloper86/open3d/releases/tag/v0.1.0a1"
+        release_run: "https://github.com/nguyenanhducdeveloper86/open3d/actions/runs/32283792235"
+        commit: "21e328b6d41b83be1475221854ba9004cfd9ad80"
+      remaining_blockers:
+        - "The in-app browser had no available tab, so visual browser screenshot proof remains unavailable; HTTP/API/HTML/GLB smokes passed."
+        - "External visual QA, Unity/provider approval, successful real Codex/Claude receipts, and xFarm-quality parity remain outside this distribution milestone."
+      verification_attempts: 1
+  - id: T031
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the owner's requested genuinely working release milestone is complete, and separately decide the truthful state of the broader production-asset oracle."
+    inputs:
+      - "T027 through T030 receipts"
+      - "GitHub release v0.1.0a1 and workflow 32283792235"
+      - "Independent downloaded-artifact verification"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not edit product files."
+      - "A working signed distribution does not imply production-asset APPROVED status."
+      - "Distinguish the current release milestone from the broader external production gates."
+    expected_output:
+      - "release milestone complete | not complete"
+      - "full original outcome complete true | false"
+      - "exact remaining external evidence"
+      - "terminal board disposition"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      rationale: "The public signed-alpha distribution milestone is complete: six downloadable assets, green CI/release workflows, matching checksums, and workflow/tag/SHA-bound Sigstore/SLSA attestations are verified. The annotated tag itself is unsigned, so only artifact provenance is claimed. The broader production-asset oracle remains incomplete because browser, external visual, Unity/provider, real-agent, and xFarm-fidelity gates lack evidence. No further safe local slice can prove those external gates."
+      evidence:
+        - "Release v0.1.0a1 is public, non-draft, marked prerelease, and publishes six assets."
+        - "CI 32283444612, tag CI 32283792171, and signed-release 32283792235 passed at 21e328b6d41b83be1475221854ba9004cfd9ad80."
+        - "All published checksums and six Sigstore/SLSA attestations verified against release.yml, refs/tags/v0.1.0a1, and the release commit."
+        - "The remote annotated tag resolves to the release commit but is not cryptographically tag-signed."
+        - "Clean wheel CLI/MCP, extracted app Blender production-run, API/HTML/GLB, and viewer static smokes passed."
+        - "Release metadata explicitly preserves LOCAL_ONLY_NOT_APPROVED."
+      missing_evidence:
+        - "Independent external six-view visual QA and production approval."
+        - "Unity validation and authenticated provider evidence."
+        - "Successful structured receipts from real Codex and Claude Code runs."
+        - "Browser-level viewer visual proof against the released bundle."
+        - "Richer xFarm-quality parity and APPROVED signed production-asset metadata."
+      required_board_updates:
+        - "Record the public signed-alpha distribution milestone as complete."
+        - "Place the broader goal in terminal external-evidence wait without creating another local Worker."
+        - "Resume only when the missing external evidence is available."
 
 checks:
-  dirty_fingerprint: unknown
+  dirty_fingerprint: "Only pre-existing untracked GoalBuddy notes/board output and examples/watering-can/project.json remain."
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T031
+    commands:
+      - "20 local tests passed with 1 optional skip."
+      - "CI and tag CI passed at 21e328b6d41b83be1475221854ba9004cfd9ad80."
+      - "Signed-release 32283792235 passed and published v0.1.0a1."
+      - "Downloaded checksums, clean install, production bundle, and all six attestations verified."
