@@ -1,0 +1,35 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T999",
+    "decision": "not_complete",
+    "full_outcome_complete": false,
+    "rationale": "The local fixture and viewer/release paths are verified, but the original oracle is not fully evidenced. The clean lantern path passes locally and all catalog briefs emit six-view manifests with truthful non-approval. Watering-can validation, external visual QA, Unity/provider evidence, richer xFarm fidelity, browser-level proof, successful structured Codex/Claude receipts, and approved signed release evidence remain incomplete.",
+    "evidence": [
+      "GoalBuddy checker passed with T999 active and no errors.",
+      "Full Python oracle passed 19 tests with 1 optional schema test skipped locally.",
+      "Viewer build passed.",
+      "Clean lantern production-run, repair, validate, promote, and release-verify passed.",
+      "Fresh Codex receipt was UNAVAILABLE/STRUCTURED_RECEIPT_MISSING; Claude receipt was FAILED/CLI_TIMEOUT; both made no mutation.",
+      "Watering-can catalog validation failed its blocking dimensions check."
+    ],
+    "missing_evidence": [
+      "Blender must be installed in the clean CI runner so the full production test suite executes.",
+      "Watering-can validation must pass.",
+      "Independent external six-view visual QA.",
+      "Unity and authenticated provider evidence.",
+      "Successful structured Codex and Claude production receipts.",
+      "Richer xFarm-quality asset fidelity.",
+      "Browser-level viewer-load proof.",
+      "APPROVED signed release metadata."
+    ],
+    "commands": [
+      {"cmd": "node check-goal-state.mjs", "status": "pass"},
+      {"cmd": "python3 -m unittest discover -s tests -v", "status": "pass", "result": "19 passed, 1 skipped"},
+      {"cmd": "npm run build --prefix web", "status": "pass"},
+      {"cmd": "clean lantern production-run -> repair -> validate -> promote -> release-verify", "status": "pass"},
+      {"cmd": "three catalog briefs production-run -> validate", "status": "fail", "result": "watering-can dimensions check"},
+      {"cmd": "git diff --check", "status": "pass"}
+    ]
+  }
+}

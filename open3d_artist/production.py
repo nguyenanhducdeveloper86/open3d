@@ -225,10 +225,25 @@ def _safe_raster_source(path: Path, root: Path) -> Path:
     return resolved
 
 
+def _visual_qa_font() -> Path:
+    candidates = (
+        Path("/System/Library/Fonts/Helvetica.ttc"),
+        Path("/System/Library/Fonts/HelveticaNeue.ttc"),
+        Path("/Library/Fonts/Arial.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise ProjectError("local ImageMagick visual QA requires an installed system font")
+
+
 def _rasterize(path: Path, output: Path, root: Path) -> bytes:
     source = _safe_raster_source(path, root)
     # Fixed, bounded invocation; inputs never contribute options or commands.
-    command = ["convert", "-font", "/System/Library/Fonts/Helvetica.ttc", str(source), "-background", "#ffffff", "-alpha", "remove", "-alpha", "off", "-resize", "256x256!", "-depth", "8", f"RGB:{output}"]
+    command = ["convert", "-font", str(_visual_qa_font()), str(source), "-background", "#ffffff", "-alpha", "remove", "-alpha", "off", "-resize", "256x256!", "-depth", "8", f"RGB:{output}"]
     try:
         subprocess.run(command, cwd=root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -253,7 +268,7 @@ def _local_visual_qa(root: Path, reference: Path, candidate: Path) -> dict[str, 
         mismatched.append("HERO_3Q_VISUAL_SIMILARITY")
     else:
         matched.append("HERO_3Q_VISUAL_SIMILARITY")
-    return {"status": "UNAVAILABLE_REPAIR_REQUIRED", "approval": "LOCAL_ONLY_NOT_APPROVED", "method": "LOCAL_IMAGEMAGICK_RGB_MAE", "command": "convert -font /System/Library/Fonts/Helvetica.ttc <checked-in-path> -background #ffffff -alpha remove -alpha off -resize 256x256! -depth 8 RGB:<temporary-path>", "dimensions": {"width": 256, "height": 256, "channels": 3}, "reference_digest": digest_bytes(reference.read_bytes()), "candidate_digest": digest_bytes(candidate.read_bytes()), "similarity": similarity, "mean_absolute_error": round(mean_absolute_error, 6), "differing_bytes": sum(value != 0 for value in differences), "matched_components": matched, "mismatched_components": mismatched, "next_action": "REPAIR_REQUIRED_BEFORE_APPROVAL", "scope": "PACK_PENDING_FULL_6_VIEW"}
+    return {"status": "UNAVAILABLE_REPAIR_REQUIRED", "approval": "LOCAL_ONLY_NOT_APPROVED", "method": "LOCAL_IMAGEMAGICK_RGB_MAE", "command": "convert -font <installed-system-font> <checked-in-path> -background #ffffff -alpha remove -alpha off -resize 256x256! -depth 8 RGB:<temporary-path>", "dimensions": {"width": 256, "height": 256, "channels": 3}, "reference_digest": digest_bytes(reference.read_bytes()), "candidate_digest": digest_bytes(candidate.read_bytes()), "similarity": similarity, "mean_absolute_error": round(mean_absolute_error, 6), "differing_bytes": sum(value != 0 for value in differences), "matched_components": matched, "mismatched_components": mismatched, "next_action": "REPAIR_REQUIRED_BEFORE_APPROVAL", "scope": "PACK_PENDING_FULL_6_VIEW"}
 
 
 def release_metadata(receipt: dict[str, Any]) -> dict[str, Any]:

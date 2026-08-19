@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T020
+active_task: T022
 
 tasks:
   - id: T001
@@ -1289,7 +1289,7 @@ tasks:
   - id: T020
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Audit the real-agent smoke evidence and decide whether the remaining external gates justify further local work or a final truthful completion audit."
     inputs:
@@ -1308,11 +1308,39 @@ tasks:
       - "verify"
       - "stop_if"
       - "Deferred work and missing proof"
-    receipt: null
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "Approve T999 as the next final audit. No further local Worker is justified: local generation, QA, repair, promotion, release verification, and bridge safety are proven; remaining gaps require external evidence or credentials. Additional wrappers or unchanged CLI retries would not prove those gates."
+      evidence:
+        - docs/goals/production-asset-agents/goal.md
+        - docs/goals/production-asset-agents/notes/T019-receipt.json
+        - docs/goals/production-asset-agents/notes/T019-codex-agent_process_receipt.json
+        - docs/goals/production-asset-agents/notes/T019-claude-agent_process_receipt.json
+        - open3d_artist/production.py
+        - open3d_artist/agent_bridge.py
+        - "git history through d00f8a5"
+        - "GoalBuddy checker passed; 19 tests passed, 1 skipped"
+      subgoal_contract: null
+      parallel_safety:
+        safe: true
+        reason: "T999 is read-only; no Worker package is required."
+      blocked_tasks: []
+      missing_evidence:
+        - "Independent external six-view visual QA"
+        - "Unity validation and provider outputs"
+        - "Richer xFarm-quality recipes"
+        - "Successful authenticated structured Codex and Claude receipts"
+        - "APPROVED signed release metadata"
+      required_board_updates:
+        - "Mark T020 done and activate T999 as the exact next task."
+        - "T999 must rerun the clean end-to-end oracle and inspect the current dirty worktree."
+        - "Keep the goal incomplete unless every listed gate is genuinely evidenced."
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether the full Open3D production asset and agent outcome is complete against the goal oracle."
     inputs:
@@ -1328,6 +1356,100 @@ tasks:
       - "complete | not_complete"
       - "full_outcome_complete: true | false"
       - "Missing evidence"
+      - "Next task if not complete"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      rationale: "The local fixture and viewer/release paths are verified, but the original oracle is not fully evidenced. The clean lantern path passes locally and all catalog briefs emit six-view manifests with truthful non-approval. Watering-can validation, external visual QA, Unity/provider evidence, richer xFarm fidelity, browser-level proof, successful structured Codex/Claude receipts, and approved signed release evidence remain incomplete."
+      evidence:
+        - "GoalBuddy checker passed with T999 active and no errors."
+        - "Full Python oracle passed 19 tests with 1 optional schema test skipped locally."
+        - "Viewer build passed."
+        - "Clean lantern production-run, repair, validate, promote, and release-verify passed."
+        - "Fresh Codex receipt was UNAVAILABLE/STRUCTURED_RECEIPT_MISSING; Claude receipt was FAILED/CLI_TIMEOUT; both made no mutation."
+        - "Watering-can catalog validation failed its blocking dimensions check."
+      missing_evidence:
+        - "Blender must be installed in the clean CI runner so the full production test suite executes."
+        - "Watering-can validation must pass."
+        - "Independent external six-view visual QA."
+        - "Unity and authenticated provider evidence."
+        - "Successful structured Codex and Claude production receipts."
+        - "Richer xFarm-quality asset fidelity."
+        - "Browser-level viewer-load proof."
+        - "APPROVED signed release metadata."
+      commands:
+        - cmd: "node check-goal-state.mjs"
+          status: pass
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 passed, 1 skipped"
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "clean lantern production-run -> repair -> validate -> promote -> release-verify"
+          status: pass
+        - cmd: "three catalog briefs production-run -> validate"
+          status: fail
+          result: "watering-can dimensions check"
+        - cmd: "git diff --check"
+          status: pass
+  - id: T021
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Make the GitHub Actions CI environment install Blender, bubblewrap, ImageMagick, and a known system font required by the checked-in production fixture, make local visual QA select a portable installed font, then verify the exact repository test command and existing compile/viewer checks."
+    allowed_files:
+      - ".github/workflows/ci.yml"
+      - "open3d_artist/production.py"
+    verify:
+      - "Inspect the workflow and confirm Blender is installed before the test step."
+      - "python -m unittest discover -s tests -v"
+      - "python -m compileall -q open3d_artist tests"
+      - "npm run build --prefix web"
+    stop_if:
+      - "Any product source outside open3d_artist/production.py, test, fixture, or release artifact needs modification."
+      - "The workflow cannot install Blender, bubblewrap, ImageMagick, and a system font on its declared runner."
+      - "The exact production test command remains unable to execute the Blender fixture."
+      - "Do not claim the full production oracle or APPROVED release from CI dependency installation alone."
+    receipt:
+      result: done
+      changed_files:
+        - .github/workflows/ci.yml
+        - open3d_artist/production.py
+      summary: "Updated GitHub Actions to install the Blender production runtime, bubblewrap network sandbox, ImageMagick, and DejaVu fonts before the production test suite. Made the bounded ImageMagick visual QA command choose a fixed installed font across macOS, Linux, and Windows instead of assuming a macOS-only path."
+      commands:
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 tests passed, 1 optional JSON Schema test skipped"
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+        - cmd: "npm run build --prefix web"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      verification_attempts: 1
+      remaining_blockers:
+        - "The remote GitHub Actions run must confirm the hosted runner packages are available and the full suite executes there."
+        - "Watering-can validation, external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level proof, and approved signed release metadata remain incomplete."
+  - id: T022
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Audit the post-CI dependency fix against the original production oracle, including the remote workflow result when available, and decide the next largest safe slice without claiming completion from a green CI run alone."
+    inputs:
+      - "T021 receipt"
+      - "GitHub Actions CI run for the pushed workflow"
+      - "T999 final audit"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject completion if CI still lacks Blender, if the watering-can catalog validation fails, or if required external/agent/release evidence remains absent."
+      - "Separate a green build from APPROVED production evidence."
+    expected_output:
+      - "complete | not_complete"
+      - "Full oracle evidence and remaining blockers"
       - "Next task if not complete"
     receipt: null
 

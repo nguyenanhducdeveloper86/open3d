@@ -1,0 +1,35 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T021",
+    "changed_files": [
+      ".github/workflows/ci.yml",
+      "open3d_artist/production.py"
+    ],
+    "summary": "Updated GitHub Actions to install the Blender production runtime, bubblewrap network sandbox, ImageMagick, and DejaVu fonts before the production test suite. Made the bounded ImageMagick visual QA command choose a fixed installed font across macOS, Linux, and Windows instead of assuming a macOS-only path.",
+    "commands": [
+      {
+        "cmd": "python3 -m unittest discover -s tests -v",
+        "status": "pass",
+        "result": "19 tests passed, 1 optional JSON Schema test skipped"
+      },
+      {
+        "cmd": "python3 -m compileall -q open3d_artist tests",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm run build --prefix web",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "verification_attempts": 1,
+    "remaining_blockers": [
+      "The remote GitHub Actions run must confirm the hosted runner packages are available and the full suite executes there.",
+      "Watering-can validation, external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level proof, and approved signed release metadata remain incomplete."
+    ]
+  }
+}
