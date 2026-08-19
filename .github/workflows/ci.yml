@@ -21,7 +21,7 @@ jobs:
         run: |
           sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt
           timeout 180s sudo env DEBIAN_FRONTEND=noninteractive apt-get update
-          timeout 300s sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y blender bubblewrap imagemagick fonts-dejavu-core
+          timeout 300s sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y blender bubblewrap imagemagick fonts-dejavu-core libegl1
           blender --version
           bwrap --version
           convert -version
