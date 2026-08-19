@@ -19,6 +19,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install production runtimes
         run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources
           timeout 180s sudo env DEBIAN_FRONTEND=noninteractive apt-get update
           timeout 300s sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y blender bubblewrap imagemagick fonts-dejavu-core
           blender --version
