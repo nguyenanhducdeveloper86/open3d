@@ -1,0 +1,36 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T025",
+    "changed_files": [
+      "examples/production-qualification/recipe-watering-can.json",
+      "tests/test_production_catalog.py"
+    ],
+    "summary": "Reduced the watering-can spout width and handle height so the deterministic Blender/GLB bounds fit the declared 1.1m x 0.7m x 0.8m contract. Strengthened the catalog test to require PASS technical validation for every registered recipe before checking its reference manifest.",
+    "commands": [
+      {
+        "cmd": "python3 -m unittest -v tests.test_production_catalog",
+        "status": "pass",
+        "result": "2 tests passed; all three catalog entries generated and validated"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s tests -v",
+        "status": "pass",
+        "result": "19 tests passed, 1 optional JSON Schema test skipped"
+      },
+      {
+        "cmd": "python3 -m json.tool examples/production-qualification/recipe-watering-can.json",
+        "status": "pass"
+      },
+      {
+        "cmd": "git diff --check",
+        "status": "pass"
+      }
+    ],
+    "remaining_blockers": [
+      "External visual QA and approval remain unavailable.",
+      "Successful structured Codex and Claude production receipts remain unavailable/failed.",
+      "Unity/provider evidence, browser-level viewer proof, richer xFarm fidelity, and APPROVED signed release metadata remain absent."
+    ]
+  }
+}

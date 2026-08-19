@@ -15,7 +15,9 @@ class ProductionCatalogTest(unittest.TestCase):
         for entry in catalog():
             brief = json.loads((ROOT / "examples/production-qualification" / brief_names[entry["recipe_id"]]).read_text())
             with tempfile.TemporaryDirectory() as directory:
-                manifest = run_production(brief, Path(directory) / "run")["receipt"]["reference_manifest"]
+                result = run_production(brief, Path(directory) / "run")
+                self.assertEqual(result["validation"]["status"], "PASS")
+                manifest = result["receipt"]["reference_manifest"]
                 self.assertEqual(manifest["required_views"], REQUIRED_VIEWS)
                 self.assertEqual([item["role"] for item in manifest["attachments"][:2]], ["REFERENCE_SAMPLE", "CANDIDATE"])
                 self.assertEqual([item["view"] for item in manifest["attachments"][1:]], REQUIRED_VIEWS)

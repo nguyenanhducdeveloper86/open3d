@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T024
+active_task: T026
 
 tasks:
   - id: T001
@@ -1516,7 +1516,7 @@ tasks:
   - id: T024
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Run the final truthful audit after the green hosted CI run. Verify the remaining catalog, agent, external QA, viewer, and signed-release gates against the original oracle; do not mark complete unless every required gate is evidenced."
     inputs:
@@ -1532,6 +1532,95 @@ tasks:
       - "complete | not_complete"
       - "Exact evidence and remaining blockers"
       - "Next largest safe Worker slice if not complete"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      rationale: "The hosted CI run is green, but the original production oracle is not complete. The production watering-can catalog recipe exceeds its declared bounds, agent receipts are unavailable/failed, visual QA is local and incomplete, viewer proof is API-level only, and release metadata remains LOCAL_ONLY_NOT_APPROVED."
+      evidence:
+        - "GitHub Actions run 32275835309 passed at commit aa4e4f2: runtime install, 19 tests, compile, viewer build, and clean-room example."
+        - "The current examples/watering-can validator passes, but the production catalog run reports watering-can dimensions [1.13, 0.68, 0.855] against declared [1.1, 0.7, 0.8]."
+        - "T019 Codex receipt is UNAVAILABLE/STRUCTURED_RECEIPT_MISSING and Claude receipt is FAILED/CLI_TIMEOUT; both recorded no mutations."
+        - "Promotion/release verification is local-only; external visual QA, Unity, signature, and browser-level viewer evidence are unavailable."
+      missing_evidence:
+        - "Passing production catalog validation for watering-can."
+        - "Independent external six-view visual QA and approval."
+        - "Successful authenticated structured Codex and Claude production receipts."
+        - "Unity/provider evidence."
+        - "Browser-level viewer-load proof against the built bundle."
+        - "Richer xFarm-quality fidelity and APPROVED signed release metadata."
+      commands:
+        - cmd: "gh run view 32275835309"
+          status: pass
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 passed, 1 skipped"
+        - cmd: "production-run and validate for all three catalog briefs"
+          status: fail
+          result: "watering-can dimensions"
+        - cmd: check-goal-state.mjs
+          status: pass
+      required_board_updates:
+        - "Keep goal active and activate one Worker for the watering-can recipe and catalog regression assertion."
+        - "Do not claim completion from green CI alone."
+  - id: T025
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Fix the production-qualification watering-can recipe so generated Blender/GLB bounds satisfy its declared dimensions, add a regression assertion that every catalog brief validates PASS, and rerun the local oracle."
+    allowed_files:
+      - "examples/production-qualification/recipe-watering-can.json"
+      - "tests/test_production_catalog.py"
+    verify:
+      - "Run production-run and validate for brief.json, brief-watering-can.json, and brief-wood-crate.json."
+      - "python3 -m unittest discover -s tests -v"
+      - "git diff --check"
+    stop_if:
+      - "The fix requires files outside allowed_files."
+      - "Dimensions cannot be corrected without changing shared generator behavior."
+      - "Any external QA, agent, Unity, provider, approval, signing, or xFarm parity claim would be inferred rather than evidenced."
+    receipt:
+      result: done
+      changed_files:
+        - examples/production-qualification/recipe-watering-can.json
+        - tests/test_production_catalog.py
+      summary: "Reduced the watering-can spout width and handle height so the deterministic Blender/GLB bounds fit the declared 1.1m x 0.7m x 0.8m contract. Strengthened the catalog test to require PASS technical validation for every registered recipe before checking its reference manifest."
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_production_catalog"
+          status: pass
+          result: "2 tests passed; all three catalog entries generated and validated"
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 tests passed, 1 optional JSON Schema test skipped"
+        - cmd: "python3 -m json.tool examples/production-qualification/recipe-watering-can.json"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      remaining_blockers:
+        - "External visual QA and approval remain unavailable."
+        - "Successful structured Codex and Claude production receipts remain unavailable/failed."
+        - "Unity/provider evidence, browser-level viewer proof, richer xFarm fidelity, and APPROVED signed release metadata remain absent."
+  - id: T026
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Audit the corrected catalog and full local/CI verification against the original production oracle, then select the next largest safe evidence slice. Do not claim completion while external QA, agent, viewer, or approved signed-release gates are missing."
+    inputs:
+      - "T024 audit receipt"
+      - "T025 receipt"
+      - "Full local test output"
+      - "Green GitHub Actions run 32275835309"
+      - "Original production asset oracle"
+    constraints:
+      - "Read-only; do not implement."
+      - "Separate technical PASS from external visual approval and signed release approval."
+      - "Keep goal active and incomplete when any required gate is unavailable or failed."
+    expected_output:
+      - "complete | not_complete"
+      - "Exact evidence and remaining blockers"
+      - "Next Worker package if not complete"
     receipt: null
 
 checks:

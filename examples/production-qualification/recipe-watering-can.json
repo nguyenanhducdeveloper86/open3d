@@ -10,8 +10,8 @@
     "parts": [{"part_id": "body", "role": "body", "mutable": true}, {"part_id": "handle", "role": "functional", "mutable": true}, {"part_id": "spout", "role": "functional", "mutable": true}],
     "geometry": {"triangle_budget": {"max": 2000}, "primitives": [
       {"part_id": "body", "type": "cylinder", "radius": 0.34, "depth": 0.55, "segments": 24, "center": {"x": 0, "y": 0, "z": 0.35}, "color": "#278C87"},
-      {"part_id": "handle", "type": "box", "size": {"x": 0.12, "y": 0.58, "z": 0.42}, "center": {"x": 0, "y": 0, "z": 0.72}, "color": "#195E62"},
-      {"part_id": "spout", "type": "box", "size": {"x": 0.62, "y": 0.14, "z": 0.14}, "center": {"x": 0.48, "y": 0, "z": 0.48}, "color": "#42A7A0"}
+      {"part_id": "handle", "type": "box", "size": {"x": 0.12, "y": 0.58, "z": 0.31}, "center": {"x": 0, "y": 0, "z": 0.72}, "color": "#195E62"},
+      {"part_id": "spout", "type": "box", "size": {"x": 0.56, "y": 0.14, "z": 0.14}, "center": {"x": 0.48, "y": 0, "z": 0.48}, "color": "#42A7A0"}
     ]},
     "outputs": {"editable": "contract", "preview": "glb"}
   }

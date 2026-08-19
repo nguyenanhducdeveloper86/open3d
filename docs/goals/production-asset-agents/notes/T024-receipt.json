@@ -1,0 +1,33 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T024",
+    "decision": "not_complete",
+    "full_outcome_complete": false,
+    "rationale": "The hosted CI run is green, but the original production oracle is not complete. The production watering-can catalog recipe exceeds its declared bounds, agent receipts are unavailable/failed, visual QA is local and incomplete, viewer proof is API-level only, and release metadata remains LOCAL_ONLY_NOT_APPROVED.",
+    "evidence": [
+      "GitHub Actions run 32275835309 passed at commit aa4e4f2: runtime install, 19 tests, compile, viewer build, and clean-room example.",
+      "The current examples/watering-can validator passes, but the production catalog run reports watering-can dimensions [1.13, 0.68, 0.855] against declared [1.1, 0.7, 0.8].",
+      "T019 Codex receipt is UNAVAILABLE/STRUCTURED_RECEIPT_MISSING and Claude receipt is FAILED/CLI_TIMEOUT; both recorded no mutations.",
+      "Promotion/release verification is local-only; external visual QA, Unity, signature, and browser-level viewer evidence are unavailable."
+    ],
+    "missing_evidence": [
+      "Passing production catalog validation for watering-can.",
+      "Independent external six-view visual QA and approval.",
+      "Successful authenticated structured Codex and Claude production receipts.",
+      "Unity/provider evidence.",
+      "Browser-level viewer-load proof against the built bundle.",
+      "Richer xFarm-quality fidelity and APPROVED signed release metadata."
+    ],
+    "commands": [
+      {"cmd": "gh run view 32275835309", "status": "pass"},
+      {"cmd": "python3 -m unittest discover -s tests -v", "status": "pass", "result": "19 passed, 1 skipped"},
+      {"cmd": "production-run and validate for all three catalog briefs", "status": "fail", "result": "watering-can dimensions"},
+      {"cmd": "check-goal-state.mjs", "status": "pass"}
+    ],
+    "required_board_updates": [
+      "Keep goal active and activate one Worker for the watering-can recipe and catalog regression assertion.",
+      "Do not claim completion from green CI alone."
+    ]
+  }
+}
