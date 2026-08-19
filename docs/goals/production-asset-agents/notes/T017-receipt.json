@@ -32,6 +32,8 @@
       }
     ],
     "summary": "Implemented allowlisted fixture-repair-v1 with sandboxed Blender regeneration, changed geometry digests, six views, QA, rollback metadata, attempt cap, and truthful approval. Exposed CLI, HTTP, and typed MCP surfaces with tests.",
+    "commit": "c33f35f",
+    "pushed_to": "origin/main",
     "remaining_blockers": [],
     "verification_attempts": 1,
     "stopped_because": null
