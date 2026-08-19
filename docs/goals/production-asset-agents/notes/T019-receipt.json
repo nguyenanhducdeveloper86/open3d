@@ -16,6 +16,8 @@
     {"cmd": "receipt field validation", "status": "pass"}
   ],
   "summary": "Fresh lantern run, repair, validation, promotion, and release verification passed. Codex is truthfully UNAVAILABLE due to missing structured receipt; Claude is FAILED due to timeout. Both receipts preserve required fields, mutations=NONE, and production_state_unchanged=true. Overall goal remains incomplete.",
+  "commit": "112ce3a",
+  "pushed_to": "origin/main",
   "verification_attempts": 1,
   "stopped_because": null,
   "run_root": "/private/var/folders/2g/b_5hrpyj68sfv89w9p3_0ymw0000gn/T/tmp.1ssaHtbmZW",
