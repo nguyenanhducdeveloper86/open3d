@@ -1,0 +1,22 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T022",
+    "decision": "not_complete",
+    "full_outcome_complete": false,
+    "rationale": "The CI dependency fix installed Blender, bubblewrap, ImageMagick, and fonts successfully, but the hosted runner denies the bubblewrap network namespace loopback setup. The production test suite therefore still cannot execute its network-denied fixture path.",
+    "evidence": [
+      "GitHub Actions run 32249218458 passed Install production runtimes and Install development checks.",
+      "The failing production process reported: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted.",
+      "The failure affected the eight Blender-backed production tests; non-Blender tests passed."
+    ],
+    "missing_evidence": [
+      "A green clean GitHub Actions production test run.",
+      "Watering-can validation, external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level proof, and approved signed release metadata."
+    ],
+    "commands": [
+      {"cmd": "gh run view 32249218458 --log-failed", "status": "pass"},
+      {"cmd": "production test execution on hosted runner", "status": "fail", "result": "bubblewrap RTM_NEWADDR permission denied"}
+    ]
+  }
+}

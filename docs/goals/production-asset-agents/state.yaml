@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T022
+active_task: T023
 
 tasks:
   - id: T001
@@ -1435,7 +1435,7 @@ tasks:
   - id: T022
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Audit the post-CI dependency fix against the original production oracle, including the remote workflow result when available, and decide the next largest safe slice without claiming completion from a green CI run alone."
     inputs:
@@ -1451,6 +1451,43 @@ tasks:
       - "complete | not_complete"
       - "Full oracle evidence and remaining blockers"
       - "Next task if not complete"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      rationale: "The CI dependency fix installed Blender, bubblewrap, ImageMagick, and fonts successfully, but the hosted runner denies the bubblewrap network namespace loopback setup. The production test suite therefore still cannot execute its network-denied fixture path."
+      evidence:
+        - "GitHub Actions run 32249218458 passed Install production runtimes and Install development checks."
+        - "The failing production process reported: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted."
+        - "The failure affected the eight Blender-backed production tests; non-Blender tests passed."
+      missing_evidence:
+        - "A green clean GitHub Actions production test run."
+        - "Watering-can validation, external visual QA, Unity/provider evidence, successful structured Codex/Claude receipts, richer xFarm fidelity, browser-level proof, and approved signed release metadata."
+      commands:
+        - cmd: "gh run view 32249218458 --log-failed"
+          status: pass
+        - cmd: "production test execution on hosted runner"
+          status: fail
+          result: "bubblewrap RTM_NEWADDR permission denied"
+  - id: T023
+    type: worker
+    assignee: Worker
+    status: active
+    reasoning_hint: medium
+    objective: "Make the GitHub Actions production test step run the existing network-denied bubblewrap sandbox with the hosted runner privileges it requires, then verify the exact full suite, compile, viewer build, and clean-room checks. Do not weaken production execution to unsafe mode."
+    allowed_files:
+      - ".github/workflows/ci.yml"
+    verify:
+      - "Inspect the workflow to confirm the test harness uses only the ephemeral hosted runner privilege needed by bubblewrap."
+      - "python -m unittest discover -s tests -v"
+      - "python -m compileall -q open3d_artist tests"
+      - "npm run build --prefix web"
+      - "Run the workflow and confirm the clean-room example passes."
+    stop_if:
+      - "The workflow disables network isolation, uses allow_unsafe, or changes production code."
+      - "The hosted runner still rejects bubblewrap namespace creation."
+      - "Any product source, test, fixture, or release artifact needs modification."
+      - "Do not claim the production oracle complete from a green CI run alone."
     receipt: null
 
 checks:

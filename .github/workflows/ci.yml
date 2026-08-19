@@ -27,7 +27,7 @@ jobs:
       - name: Install development checks
         run: python -m pip install --disable-pip-version-check -e '.[dev]'
       - name: Test
-        run: python -m unittest discover -s tests -v
+        run: sudo -E env "PATH=$PATH" python -m unittest discover -s tests -v
       - name: Compile
         run: python -m compileall -q open3d_artist tests
       - name: Viewer build
