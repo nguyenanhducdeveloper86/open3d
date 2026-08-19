@@ -65,7 +65,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/production-asset-agents/"
     command: "node /Users/ducna/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.3/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/production-asset-agents"
 
-active_task: T027
+active_task: T030
 
 tasks:
   - id: T001
@@ -1657,7 +1657,7 @@ tasks:
   - id: T027
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Hold the production approval gate until the owner supplies authenticated external visual QA, Unity/provider evidence, successful Codex/Claude structured receipts, browser-level viewer proof, richer xFarm-fidelity evidence, and approved signed-release metadata; resume a read-only audit when that evidence exists."
     inputs:
@@ -1674,6 +1674,163 @@ tasks:
     expected_output:
       - "resume audit with supplied evidence"
       - "preserve LOCAL_ONLY_NOT_APPROVED until all approval gates pass"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "The owner explicitly reoriented this tranche toward a real downloadable alpha release. The repository has a bounded release path, but no tag, GitHub Release, downloadable artifacts, clean-install proof, checksum proof, or attestation verification exists yet. One Worker can publish and verify the distribution while preserving LOCAL_ONLY_NOT_APPROVED for production assets."
+      evidence:
+        - "T026 records full_outcome_complete=false and LOCAL_ONLY_NOT_APPROVED despite green catalog and hosted CI verification."
+        - "HEAD and origin/main both resolve to 9478ff91ae3d2073caa96a3bb4d02c4cbefbce87."
+        - "Local and remote tag listings, GitHub Releases, and signed-release workflow runs are empty."
+        - "release.yml, scripts/build_release.py, pyproject.toml, and authenticated repository-owner access provide a bounded publication path."
+      worker_package:
+        objective: "Publish and verify Open3D Artist v0.1.0a1 as a genuinely downloadable GitHub alpha distribution. Make only necessary bounded release-file corrections; ensure the tag matches pyproject metadata; build and smoke-test the wheel, sdist, viewer archive, SBOM, checksums, and provenance workflow; commit and push verified corrections; create and push a new annotated v0.1.0a1 tag; wait for signed-release; then download and independently verify every published asset. Mark the GitHub release prerelease/alpha and explicitly preserve the distinction from production-asset APPROVED status."
+        allowed_files:
+          - ".github/workflows/release.yml"
+          - "scripts/build_release.py"
+          - "pyproject.toml"
+          - "README.md"
+        verify:
+          - "python3 -m unittest discover -s tests -v"
+          - "python3 -m compileall -q open3d_artist tests"
+          - "npm ci --prefix web && npm run build --prefix web"
+          - "Build release artifacts with RELEASE_TAG=v0.1.0a1 in a clean virtual environment."
+          - "Verify release/SHA256SUMS, clean wheel installation, open3d --help, and viewer archive index."
+          - "Push annotated v0.1.0a1, require the signed-release workflow to pass, then independently download and verify assets and GitHub provenance."
+          - "git diff --check"
+        stop_if:
+          - "v0.1.0a1 already exists locally, remotely, or as a GitHub release; do not delete, overwrite, or move an existing tag."
+          - "Initial HEAD differs from origin/main, or tracked changes outside allowed_files would be overwritten or require modification."
+          - "Publishing, Actions, contents-write, OIDC attestation, or repository permissions are unavailable."
+          - "A clean wheel install, CLI smoke test, checksum verification, viewer archive check, or remote workflow fails for a cause outside allowed_files."
+          - "Publishing would require changing production runtime code, tests, assets, schemas, or provider integrations."
+          - "Any release text or metadata would claim production-asset APPROVED, external visual approval, Unity/provider validation, successful Codex/Claude evidence, or xFarm-quality parity without receipts."
+      missing_evidence:
+        - "A remote v0.1.0a1 tag resolving to the released main commit."
+        - "A successful signed-release workflow run and public prerelease."
+        - "Independent checksum, clean-install, viewer-archive, and provenance verification from downloaded assets."
+        - "External production-asset approval gates remain separate and unavailable."
+      required_board_updates:
+        - "Create and activate T028 from this worker package."
+        - "Keep full_outcome_complete=false after distribution publication unless a later final audit proves every original oracle gate."
+  - id: T028
+    type: worker
+    assignee: Worker
+    status: blocked
+    reasoning_hint: medium
+    objective: "Publish and verify Open3D Artist v0.1.0a1 as a genuinely downloadable GitHub alpha distribution. Make only necessary bounded release-file corrections; ensure the tag matches pyproject metadata; build and smoke-test the wheel, sdist, viewer archive, SBOM, checksums, and provenance workflow; commit and push verified corrections; create and push a new annotated v0.1.0a1 tag; wait for signed-release; then download and independently verify every published asset. Mark the GitHub release prerelease/alpha and explicitly preserve the distinction from production-asset APPROVED status."
+    allowed_files:
+      - ".github/workflows/release.yml"
+      - "scripts/build_release.py"
+      - "pyproject.toml"
+      - "README.md"
+    verify:
+      - "python3 -m unittest discover -s tests -v"
+      - "python3 -m compileall -q open3d_artist tests"
+      - "npm ci --prefix web && npm run build --prefix web"
+      - "Build release artifacts with RELEASE_TAG=v0.1.0a1 in a clean virtual environment."
+      - "Verify release/SHA256SUMS, clean wheel installation, open3d --help, and viewer archive index."
+      - "Push annotated v0.1.0a1, require the signed-release workflow to pass, then independently download and verify assets and GitHub provenance."
+      - "git diff --check"
+    stop_if:
+      - "v0.1.0a1 already exists locally, remotely, or as a GitHub release; do not delete, overwrite, or move an existing tag."
+      - "Initial HEAD differs from origin/main, or tracked changes outside allowed_files would be overwritten or require modification."
+      - "Publishing, Actions, contents-write, OIDC attestation, or repository permissions are unavailable."
+      - "A clean wheel install, CLI smoke test, checksum verification, viewer archive check, or remote workflow fails for a cause outside allowed_files."
+      - "Publishing would require changing production runtime code, tests, assets, schemas, or provider integrations."
+      - "Any release text or metadata would claim production-asset APPROVED, external visual approval, Unity/provider validation, successful Codex/Claude evidence, or xFarm-quality parity without receipts."
+    receipt:
+      result: blocked
+      changed_files:
+        - ".github/workflows/release.yml"
+        - "scripts/build_release.py"
+        - "README.md"
+      commands:
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "19 tests passed, 1 optional skip"
+        - cmd: "python3 -m compileall -q open3d_artist tests"
+          status: pass
+        - cmd: "npm ci --prefix web && npm run build --prefix web"
+          status: pass
+        - cmd: "Build twice with RELEASE_TAG=v0.1.0a1 and compare SHA256SUMS"
+          status: pass
+          result: "all artifacts deterministic"
+        - cmd: "Clean wheel installation and open3d --help"
+          status: fail
+          result: "MCP eagerly loads the repository-external production catalog"
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added deterministic clean release generation, a self-contained app source bundle, full workflow tests and artifact smokes, provenance attestation, prerelease labeling, and honest LOCAL_ONLY_NOT_APPROVED documentation. Clean-wheel smoke exposed an out-of-scope eager MCP catalog import."
+      spawned_tasks:
+        - T029
+      blocked_reason: "The clean-wheel CLI smoke requires a runtime correction outside T028 allowed_files."
+  - id: T029
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Make the installed core wheel CLI and MCP start without repository-only production catalog files by loading catalog-backed recipe IDs lazily and degrading that enum to empty when the catalog is unavailable; add one regression test, then rerun the clean-wheel release smoke."
+    allowed_files:
+      - "open3d_artist/mcp.py"
+      - "tests/test_mcp.py"
+    verify:
+      - "python3 -m unittest -v tests.test_mcp"
+      - "python3 -m unittest discover -s tests -v"
+      - "Build v0.1.0a1 artifacts and verify a clean wheel install can run open3d --help."
+      - "git diff --check"
+    stop_if:
+      - "The fix requires bundling repository production resources into the core wheel or changing files outside allowed_files."
+      - "Core MCP tools become unavailable when the production catalog is absent."
+      - "Production recipe IDs are no longer exposed when running from the self-contained app bundle or repository."
+      - "Verification fails twice without a clear in-scope fix."
+    receipt:
+      result: done
+      changed_files:
+        - "open3d_artist/mcp.py"
+        - "tests/test_mcp.py"
+      commands:
+        - cmd: "python3 -m unittest -v tests.test_mcp"
+          status: pass
+        - cmd: "python3 -m unittest discover -s tests -v"
+          status: pass
+          result: "20 tests passed, 1 optional skip"
+        - cmd: "Build v0.1.0a1 artifacts, install the wheel in a clean environment, and run open3d --help"
+          status: pass
+        - cmd: "Clean-wheel tools/list assertion"
+          status: pass
+          result: "core tools remain available and recipe enum is empty without a catalog"
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Moved MCP tool-schema construction behind tools/list. Repository and app-bundle catalogs still expose recipe IDs; absent wheel catalogs produce an empty recipe enum while retaining core tools. Added one focused stdlib regression test."
+      remaining_blockers: []
+      verification_attempts: 1
+  - id: T030
+    type: worker
+    assignee: Worker
+    status: active
+    reasoning_hint: medium
+    objective: "Finish the v0.1.0a1 app bundle and release smoke so its documented quick start and extracted production-run path are self-contained, then verify, commit, push, tag, publish, download, and validate the immutable GitHub prerelease and provenance."
+    allowed_files:
+      - ".github/workflows/release.yml"
+      - "scripts/build_release.py"
+      - "README.md"
+    verify:
+      - "python3 -m unittest discover -s tests -v"
+      - "python3 -m compileall -q open3d_artist tests"
+      - "npm ci --prefix web && npm run build --prefix web"
+      - "Build v0.1.0a1 twice and require identical SHA256SUMS."
+      - "Verify checksums, clean wheel CLI/MCP, app-bundle quick-start input, extracted production run, and viewer bundle index."
+      - "Push the release commit and annotated v0.1.0a1 tag; require CI and signed-release to pass."
+      - "Download all public release assets and independently verify checksums, clean install, archive contents, and GitHub attestation."
+      - "git diff --check"
+    stop_if:
+      - "v0.1.0a1 exists before publication; do not overwrite or move it."
+      - "Any check requires weakening sandbox, checksum, provenance, or production approval truthfulness."
+      - "A fix requires product files outside the already staged MCP regression and these allowed release files."
+      - "GitHub permissions or attestation are unavailable."
+      - "The release would imply production-asset APPROVED status."
     receipt: null
 
 checks:

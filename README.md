@@ -18,6 +18,12 @@ The repository ships a runnable v0.1 local production slice:
 
 Blender, Unity, and remote providers remain optional runtime dependencies. No model weights, proprietary credentials, Blender binary, Unity Editor, or importer package is bundled.
 
+## Alpha distribution
+
+The `v0.1.0a1` release is a prerelease. Its wheel contains the Python core and CLI only. Use the `open3d-artist-app-v0.1.0a1.tar.gz` source bundle when you need the checked-in production recipes, fixture tool, Unity validator source, and built viewer; host runtimes such as Blender, bubblewrap/ImageMagick, and Unity are still installed separately. Verify downloaded files with `sha256sum -c SHA256SUMS`.
+
+Distribution provenance attests what was built, not production-asset approval. Released production examples remain `LOCAL_ONLY_NOT_APPROVED`; the alpha does not imply external visual QA, Unity/provider validation, successful agent execution, or xFarm-quality parity.
+
 ## Quick start
 
 Requires Python 3.11+.

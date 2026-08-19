@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from .project import Project, ProjectError
-from .production import REPAIR_ID, catalog, promote_production, production_agent_receipt, production_state, repair_production, run_production, verify_release
+from .production import CATALOG, REPAIR_ID, catalog, promote_production, production_agent_receipt, production_state, repair_production, run_production, verify_release
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -21,17 +21,19 @@ def _tool(name: str, description: str, properties: dict[str, Any], required: lis
     return {"name": name, "description": description, "inputSchema": {"type": "object", "properties": properties, "required": required or [], "additionalProperties": False}}
 
 
-TOOLS = [
-    _tool("asset.inspect", "Inspect the current asset contract and artifact refs.", {}, []),
-    _tool("asset.validate", "Run deterministic QA against the current GLB.", {}, []),
-    _tool("asset.edit_part", "Scale one semantic part and keep the change checkpointed.", {"part_id": {"type": "string"}, "scale_x": {"type": "number", "exclusiveMinimum": 0}, "scale_y": {"type": "number", "exclusiveMinimum": 0}, "scale_z": {"type": "number", "exclusiveMinimum": 0}, "idempotency_key": {"type": "string"}}, ["part_id"]),
-    _tool("checkpoint.rollback", "Restore an exact prior checkpoint.", {"checkpoint_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}, ["checkpoint_id"]),
-    _tool("production.run", "Run a checked-in local production brief.", {"brief": {"type": "object", "additionalProperties": False, "properties": {"schema_version": {"type": "string", "const": "0.1.0"}, "brief_id": {"type": "string"}, "prompt": {"type": "string"}, "reference": {"type": "object"}, "recipe_id": {"type": "string", "enum": [entry["recipe_id"] for entry in catalog()]}, "views": {"type": "array", "items": {"type": "string"}}}, "required": ["brief_id", "prompt", "reference", "recipe_id", "views"]}, "output": {"type": "string"}}, ["brief", "output"]),
-    _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
-    _tool("production.repair", "Run the one fixed geometry-changing local repair.", {"run": {"type": "string"}, "repair_id": {"type": "string", "enum": [REPAIR_ID]}}, ["run", "repair_id"]),
-    _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
-    _tool("production.agent_receipt", "Run a fixed read-only Codex or Claude review and record evidence.", {"agent": {"type": "string", "enum": ["codex", "claude"]}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
-]
+def _tools() -> list[dict[str, Any]]:
+    recipe_ids = [entry["recipe_id"] for entry in catalog()] if CATALOG.is_file() else []
+    return [
+        _tool("asset.inspect", "Inspect the current asset contract and artifact refs.", {}, []),
+        _tool("asset.validate", "Run deterministic QA against the current GLB.", {}, []),
+        _tool("asset.edit_part", "Scale one semantic part and keep the change checkpointed.", {"part_id": {"type": "string"}, "scale_x": {"type": "number", "exclusiveMinimum": 0}, "scale_y": {"type": "number", "exclusiveMinimum": 0}, "scale_z": {"type": "number", "exclusiveMinimum": 0}, "idempotency_key": {"type": "string"}}, ["part_id"]),
+        _tool("checkpoint.rollback", "Restore an exact prior checkpoint.", {"checkpoint_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}, ["checkpoint_id"]),
+        _tool("production.run", "Run a checked-in local production brief.", {"brief": {"type": "object", "additionalProperties": False, "properties": {"schema_version": {"type": "string", "const": "0.1.0"}, "brief_id": {"type": "string"}, "prompt": {"type": "string"}, "reference": {"type": "object"}, "recipe_id": {"type": "string", "enum": recipe_ids}, "views": {"type": "array", "items": {"type": "string"}}}, "required": ["brief_id", "prompt", "reference", "recipe_id", "views"]}, "output": {"type": "string"}}, ["brief", "output"]),
+        _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
+        _tool("production.repair", "Run the one fixed geometry-changing local repair.", {"run": {"type": "string"}, "repair_id": {"type": "string", "enum": [REPAIR_ID]}}, ["run", "repair_id"]),
+        _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
+        _tool("production.agent_receipt", "Run a fixed read-only Codex or Claude review and record evidence.", {"agent": {"type": "string", "enum": ["codex", "claude"]}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
+    ]
 
 
 def _result(value: Any, *, error: bool = False) -> dict[str, Any]:
@@ -86,7 +88,7 @@ def handle(project: Project, request: dict[str, Any]) -> dict[str, Any] | None:
         elif method == "ping":
             value = {}
         elif method == "tools/list":
-            value = {"tools": TOOLS}
+            value = {"tools": _tools()}
         elif method == "tools/call":
             params = request.get("params", {})
             value = _call(project, params["name"], params.get("arguments", {}))
