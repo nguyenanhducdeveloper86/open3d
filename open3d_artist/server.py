@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from .agent_bridge import agent_catalog, run_agent_plan
 from .project import Project, ProjectError
 from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, repair_production, run_production, verify_release
 from .providers import ConsentRequired, MeshyImageTo3D, ProviderError, provider_catalog
@@ -81,6 +82,8 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(HTTPStatus.OK, self.server.project.history())
                 if path == "/api/providers":
                     return self._send(HTTPStatus.OK, provider_catalog())
+                if path == "/api/agents":
+                    return self._send(HTTPStatus.OK, agent_catalog())
                 if path == "/api/artifact/current":
                     data = self.server.project.store.read_bytes(self.server.project.current()["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
@@ -130,6 +133,8 @@ class _Handler(BaseHTTPRequestHandler):
                     value = repair_production(body["run"], body["repair_id"], timeout=float(body.get("timeout", 300)))
                 elif path == "/api/production/agent-receipt":
                     value = production_agent_receipt(body["agent"], body["run"], output_root=body.get("output_root"), timeout=float(body.get("timeout", 30)))
+                elif path == "/api/agent/plan":
+                    value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
                 else:
                     return self._error(HTTPStatus.NOT_FOUND, "route not found")
             self._send(HTTPStatus.OK, value)

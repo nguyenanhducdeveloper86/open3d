@@ -16,6 +16,7 @@ from .project import ProjectError
 
 MAX_OUTPUT = 16 * 1024
 MAX_TIMEOUT = 60.0
+MAX_PLAN_PROMPT = 8 * 1024
 AGENTS = ("codex", "claude")
 
 
@@ -58,6 +59,72 @@ def _run_command(command: list[str], *, prompt: str, cwd: Path, timeout: float, 
     environment = {"PATH": os.path.dirname(command[0]), "LANG": "C", "LC_ALL": "C"}
     return runner(command, cwd=str(cwd), input=prompt.encode("utf-8"), stdout=subprocess.PIPE,
                   stderr=subprocess.PIPE, timeout=timeout, env=environment, check=False)
+
+
+def _agent_command(agent: str, executable: str) -> list[str]:
+    if agent == "codex":
+        return [executable, "exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "-"]
+    return [executable, "-p", "--bare", "--no-session-persistence", "--permission-mode", "plan", "--disallowed-tools", "Edit,Write,NotebookEdit,Bash", "--output-format", "text"]
+
+
+def agent_catalog(*, runner: Callable[..., Any] = subprocess.run,
+                  which: Callable[[str], str | None] = shutil.which) -> list[dict[str, Any]]:
+    result = [{"agent_id": "local", "label": "Local agent", "status": "READY", "reason": "ALLOWLISTED_LOCAL", "version": "Open3D"}]
+    for agent in AGENTS:
+        executable = which(agent)
+        if executable is None:
+            result.append({"agent_id": agent, "label": "Claude Code" if agent == "claude" else "Codex", "status": "UNAVAILABLE", "reason": "CLI_NOT_INSTALLED", "version": None})
+            continue
+        try:
+            value = runner([executable, "--version"], cwd=os.getcwd(), input=b"", stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=10, env={"PATH": os.path.dirname(executable), "LANG": "C", "LC_ALL": "C"}, check=False)
+            output = _bounded((getattr(value, "stdout", b"") or getattr(value, "stderr", b"")) or b"").strip()
+            status = "READY" if getattr(value, "returncode", 1) == 0 else "UNAVAILABLE"
+            reason = "CLI_AVAILABLE" if status == "READY" else "CLI_VERSION_FAILED"
+        except (OSError, subprocess.SubprocessError):
+            output, status, reason = "", "UNAVAILABLE", "CLI_UNAVAILABLE"
+        result.append({"agent_id": agent, "label": "Claude Code" if agent == "claude" else "Codex", "status": status, "reason": reason, "version": output or None})
+    return result
+
+
+def run_agent_plan(agent: str, prompt: str, project: str | Path, *, timeout: float = 30,
+                   runner: Callable[..., Any] = subprocess.run,
+                   which: Callable[[str], str | None] = shutil.which) -> dict[str, Any]:
+    if agent not in AGENTS:
+        raise ProjectError("agent must be codex or claude")
+    if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode("utf-8")) > MAX_PLAN_PROMPT:
+        raise ProjectError(f"prompt must be non-empty and no larger than {MAX_PLAN_PROMPT} bytes")
+    if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_TIMEOUT:
+        raise ProjectError(f"timeout must be between 0 and {MAX_TIMEOUT} seconds")
+    raw_project = Path(project).expanduser()
+    if raw_project.is_symlink() or not raw_project.is_dir():
+        raise ProjectError("agent project must be a real directory")
+    project_path = raw_project.resolve()
+    if not (project_path / ".open3d").is_dir():
+        raise ProjectError("agent project is not an Open3D project")
+    executable = which(agent)
+    if executable is None:
+        return {"status": "UNAVAILABLE", "agent": agent, "reason": "CLI_NOT_INSTALLED", "output": ""}
+    instruction = ("Read-only Open3D asset planning request. Inspect the current contract, semantic parts, and QA state in this project. "
+                   "Return a concise plan and, if useful, a proposed allowlisted edit. Do not edit files, run commands, or claim that a mutation happened.\n\n"
+                   f"User request: {prompt.strip()}")
+    command = _agent_command(agent, executable)
+    started = time.time()
+    completed = None
+    try:
+        completed = _run_command(command, prompt=instruction, cwd=project_path, timeout=float(timeout), runner=runner)
+        status = "PASS" if completed.returncode == 0 else "FAILED"
+        reason = "PLAN_COMPLETE" if status == "PASS" else "CLI_FAILED"
+    except subprocess.TimeoutExpired as exc:
+        status, reason, completed = "FAILED", "CLI_TIMEOUT", exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        status, reason, completed = "UNAVAILABLE", "CLI_UNAVAILABLE", exc
+    stdout = getattr(completed, "stdout", b"") or b""
+    stderr = getattr(completed, "stderr", b"") or b""
+    output = _bounded(stdout or stderr)
+    return {"status": status, "agent": agent, "reason": reason, "output": output, "version": None,
+            "started_at": started, "ended_at": time.time(), "duration_seconds": round(time.time() - started, 6),
+            "exit_status": getattr(completed, "returncode", None), "mutations": "NONE", "project_state_unchanged": True}
 
 
 def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path | None = None,

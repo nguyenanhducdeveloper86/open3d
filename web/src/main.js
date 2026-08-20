@@ -16,12 +16,15 @@ const state = {
   report: null,
   history: [],
   providers: [],
+  agents: [{ agent_id: "local", label: "Local agent", status: "READY", reason: "ALLOWLISTED_LOCAL", version: "Open3D" }],
   production: null,
   activeView: "workspace",
   selectedPart: null,
   query: "",
   theme: "dark",
   busy: false,
+  agentProvider: "local",
+  actionLog: [],
   createOpen: false,
   agentOpen: false,
   assetDraft: readDraft(),
@@ -69,6 +72,8 @@ app.innerHTML = `
     <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
       <header class="agent-header"><div><div class="eyebrow">LOCAL AGENT</div><h2 id="agent-title">Asset edit chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
       <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Allowlisted edits only. Review a patch before it changes the artifact.</span></div>
+      <div class="agent-controls"><label><span>AGENT ADAPTER</span><select id="agent-provider"><option value="local">Local agent</option><option value="codex">Codex</option><option value="claude">Claude Code</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check agent adapters" aria-label="Check agent adapters"><i class="ph ph-arrows-clockwise"></i></button></div>
+      <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
       <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: scale spout x 1.2"></textarea><div><span>Local operation</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Send</button></div></form>
     </aside>
@@ -91,6 +96,55 @@ function toast(message, tone = "neutral") {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+}
+
+function beginAction(label, detail = "") {
+  const action = { id: `${Date.now()}-${state.actionLog.length}`, label, detail, status: "queued", at: Date.now() };
+  state.actionLog.push(action);
+  renderAgentActivity();
+  return action.id;
+}
+
+function updateAction(id, status, detail) {
+  const action = state.actionLog.find((item) => item.id === id);
+  if (!action) return;
+  action.status = status;
+  action.detail = detail;
+  action.at = Date.now();
+  renderAgentActivity();
+}
+
+function renderAgentActivity() {
+  const root = document.querySelector("#agent-activity-list");
+  if (!root) return;
+  if (!state.actionLog.length) { root.innerHTML = `<div class="activity-empty">No actions yet.</div>`; return; }
+  const labels = { queued: "QUEUED", running: "RUNNING", done: "DONE", failed: "FAILED", info: "INFO" };
+  root.innerHTML = state.actionLog.slice(-10).reverse().map((action) => `<div class="activity-row"><span class="activity-dot ${action.status}"></span><div><b>${escapeHtml(action.label)}</b><small>${escapeHtml(action.detail || labels[action.status] || action.status)}</small></div><time>${new Date(action.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></div>`).join("");
+}
+
+function renderAgentProviderStatus() {
+  const select = document.querySelector("#agent-provider");
+  const status = document.querySelector("#agent-provider-status");
+  if (!select || !status) return;
+  select.value = state.agentProvider;
+  const agent = state.agents.find((item) => item.agent_id === state.agentProvider) || { status: "UNAVAILABLE", reason: "NOT_FOUND" };
+  status.className = `agent-provider-status ${agent.status.toLowerCase()}`;
+  status.textContent = agent.status === "READY" ? `CLI READY${agent.version ? ` · ${agent.version.split("\n")[0].slice(0, 20)}` : ""}` : agent.reason || "UNAVAILABLE";
+}
+
+async function refreshAgents() {
+  const actionId = beginAction("Check agent adapters", "Reading local Codex and Claude CLI versions");
+  updateAction(actionId, "running", "Checking installed adapters");
+  try {
+    state.agents = await api("/api/agents");
+    renderAgentProviderStatus();
+    const ready = state.agents.filter((agent) => agent.status === "READY").map((agent) => agent.label).join(", ");
+    updateAction(actionId, "done", ready ? `${ready} available` : "No external CLI available");
+    addAgentMessage("agent", ready ? `Adapters ready: ${ready}. CLI availability does not imply authentication.` : "No external agent CLI is available; Local agent remains ready.");
+  } catch (error) {
+    updateAction(actionId, "failed", error.message);
+    addAgentMessage("agent", `Agent adapter check failed: ${error.message}`);
+  }
 }
 
 function persistDraft(draft) {
@@ -181,6 +235,8 @@ function openAgent() {
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   document.querySelector("#agent-backdrop").classList.add("is-open");
+  renderAgentProviderStatus();
+  renderAgentActivity();
   renderAgentThread();
   document.querySelector("#agent-input").focus();
 }
@@ -199,18 +255,38 @@ async function submitAgentMessage(event) {
   if (!text) return;
   input.value = "";
   addAgentMessage("user", text);
+  const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
+  const label = provider?.label || state.agentProvider;
+  const actionId = beginAction(`${label} request`, state.agentProvider === "local" ? "Parsing allowlisted intents" : "Starting read-only plan");
+  if (state.agentProvider !== "local") {
+    addAgentMessage("agent", `Sending this request to ${label} in plan-only mode. It cannot edit files or run mutation commands.`);
+    try {
+      const result = await api("/api/agent/plan", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 60 }) });
+      const output = (result.output || result.reason || "No plan output").slice(0, 6000);
+      updateAction(actionId, result.status === "PASS" ? "done" : "failed", result.status === "PASS" ? "Read-only plan received" : result.reason || "Agent unavailable");
+      addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
+    } catch (error) {
+      updateAction(actionId, "failed", error.message);
+      addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
+    }
+    return;
+  }
   const request = parseAgentRequest(text);
-  if (request.error) return addAgentMessage("agent", request.error);
-  if (request.patch) return addAgentMessage("agent", `I prepared a reversible scale edit for ${request.patch.partId}. Review the payload before applying it.`, request.patch);
+  if (request.error) { updateAction(actionId, "failed", request.error); return addAgentMessage("agent", request.error); }
+  if (request.patch) { updateAction(actionId, "done", "Patch preview ready for approval"); return addAgentMessage("agent", `I prepared a reversible scale edit for ${request.patch.partId}. Review the payload before applying it.`, request.patch); }
   if (request.intent === "inspect") {
     const parts = state.inspect?.contract.parts.map((part) => part.part_id).join(", ") || "no parts loaded";
+    updateAction(actionId, "done", "Contract inspected");
     return addAgentMessage("agent", `The current contract exposes ${parts}. Select one and ask for a scale edit.`);
   }
   if (request.intent === "qa") {
     addAgentMessage("agent", "Running deterministic QA against the current GLB and contract...");
-    await runQa();
+    updateAction(actionId, "running", "Validating current GLB and contract");
+    await runQa("agent");
+    updateAction(actionId, state.report?.status === "PASS" ? "done" : "failed", `QA ${state.report?.status || "UNAVAILABLE"}`);
     return addAgentMessage("agent", `QA finished with status ${state.report?.status || "UNAVAILABLE"}.`);
   }
+  updateAction(actionId, "done", "Help response ready");
   addAgentMessage("agent", "I support `scale part-id x 1.2`, `make selected part larger`, contract inspection, and QA. I will always show a patch before mutation.");
 }
 
@@ -220,16 +296,21 @@ async function applyAgentPatch(index) {
   const { partId, scales } = message.patch;
   message.patch.status = "applying";
   renderAgentThread();
+  const actionId = beginAction(`Apply patch · ${partId}`, "Writing the approved allowlisted edit");
+  updateAction(actionId, "running", "Creating a checkpoint and rebuilding GLB");
   try {
     const body = { part_id: partId, ...Object.fromEntries(Object.entries(scales).map(([axis, factor]) => [`scale_${axis}`, factor])) };
     await api("/api/edit-part", { method: "POST", body: JSON.stringify(body) });
     message.patch.status = "applied";
     message.text = `Applied the approved scale edit to ${partId}. The viewer, QA report, and history are refreshing.`;
     toast(`Applied agent patch to ${partId}`, "success");
+    updateAction(actionId, "running", "Refreshing viewer, QA, and history");
     await refreshAfterMutation();
+    updateAction(actionId, "done", "GLB, QA, and history refreshed");
   } catch (error) {
     message.patch.status = "failed";
     message.text = `The patch was not applied: ${error.message}`;
+    updateAction(actionId, "failed", error.message);
     toast(error.message, "error");
   }
   renderAgentThread();
@@ -253,20 +334,36 @@ async function api(path, options = {}) {
 
 async function loadState() {
   try {
-    const [inspect, report, history, providers, production] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers"), api("/api/production/state")]);
+    const [inspect, report, history, providers] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers")]);
     state.inspect = inspect;
     state.report = report;
     state.history = history;
     state.providers = providers;
-    state.production = production;
+    state.production = await api("/api/production/state").catch((error) => ({ status: "UNAVAILABLE", error: error.message }));
+    state.agents = await api("/api/agents").catch(() => state.agents);
     state.selectedPart = inspect.contract.parts[0]?.part_id || null;
     hydrateHeader();
     renderView();
+    renderAgentProviderStatus();
     await loadArtifact();
   } catch (error) {
+    state.inspect = null;
+    renderConnectionError(error);
     toast(error.message, "error");
-    document.querySelector("#asset-subtitle").textContent = "Start `open3d serve` with a built web bundle to connect this workspace";
   }
+}
+
+function renderConnectionError(error) {
+  disposeViewer();
+  document.querySelector("#project-name").textContent = "Offline workspace";
+  document.querySelector("#breadcrumb-name").textContent = "Connection required";
+  document.querySelector("#asset-title").textContent = "Workspace offline";
+  document.querySelector("#asset-subtitle").textContent = "The viewer API is not connected yet.";
+  document.querySelector("#artifact-id").textContent = "API unavailable";
+  document.querySelector("#qa-status").className = "status-badge fail";
+  document.querySelector("#qa-status").innerHTML = "<span></span>Offline";
+  viewRoot.innerHTML = `<section class="connection-state"><i class="ph ph-plugs-connected"></i><div><div class="eyebrow">LOCAL CONNECTION</div><h2>Connect the Open3D runtime</h2><p>${escapeHtml(error.message)}. Start <code>python3 -m open3d_artist serve examples/watering-can</code>, then retry.</p><button class="primary-action compact" id="retry-connection"><i class="ph ph-arrow-clockwise"></i>Retry connection</button></div></section>`;
+  document.querySelector("#retry-connection").addEventListener("click", loadState);
 }
 
 function hydrateHeader() {
@@ -458,8 +555,10 @@ function frameAsset() {
 
 function toggleGrid() { const grid = viewer.scene?.getObjectByName("open3d-grid"); if (grid) grid.visible = !grid.visible; }
 
-async function runQa() {
-  try { state.report = await api("/api/validate"); setQaBadge(state.report.status); hydrateHeader(); if (state.activeView === "qa") renderView(); toast("QA report refreshed", "success"); } catch (error) { toast(error.message, "error"); }
+async function runQa(source = "workspace") {
+  const actionId = beginAction(source === "agent" ? "Agent QA" : "Run QA", "Validating current GLB and contract");
+  updateAction(actionId, "running", "Reading current artifact");
+  try { state.report = await api("/api/validate"); setQaBadge(state.report.status); hydrateHeader(); if (state.activeView === "qa") renderView(); updateAction(actionId, state.report.status === "PASS" ? "done" : "failed", `QA ${state.report.status}`); toast("QA report refreshed", "success"); } catch (error) { updateAction(actionId, "failed", error.message); toast(error.message, "error"); }
 }
 
 async function applyScale() {
@@ -494,6 +593,15 @@ document.querySelector("#open-agent").addEventListener("click", openAgent);
 document.querySelector("#close-agent").addEventListener("click", closeAgent);
 document.querySelector("#agent-backdrop").addEventListener("click", closeAgent);
 document.querySelector("#agent-form").addEventListener("submit", submitAgentMessage);
+document.querySelector("#refresh-agents").addEventListener("click", refreshAgents);
+document.querySelector("#agent-provider").addEventListener("change", (event) => {
+  state.agentProvider = event.target.value;
+  const agent = state.agents.find((item) => item.agent_id === state.agentProvider);
+  renderAgentProviderStatus();
+  const actionId = beginAction(`Connect · ${agent?.label || state.agentProvider}`, agent?.status === "READY" ? "Adapter selected" : agent?.reason || "Adapter unavailable");
+  updateAction(actionId, agent?.status === "READY" ? "done" : "failed", agent?.status === "READY" ? "Ready for plan requests" : agent?.reason || "Unavailable");
+});
+document.querySelector("#clear-actions").addEventListener("click", () => { state.actionLog = []; renderAgentActivity(); });
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#search").focus(); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); state.agentOpen ? closeAgent() : openAgent(); }

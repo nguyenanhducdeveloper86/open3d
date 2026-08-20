@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from open3d_artist.agent_bridge import run_production_agent
+from open3d_artist.agent_bridge import run_agent_plan, run_production_agent
 from open3d_artist.contracts import digest_json
 from open3d_artist.project import ProjectError
 
@@ -27,6 +27,15 @@ def completed_run(root):
 
 
 class ProductionAgentReceiptTests(unittest.TestCase):
+    def test_plan_bridge_is_read_only_and_bounded_to_fixed_agent_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / ".open3d").mkdir()
+            fake = FakeRunner("read-only plan")
+            result = run_agent_plan("codex", "inspect semantic parts", root, runner=fake, which=lambda _: "/bin/fake")
+            self.assertEqual(result["status"], "PASS")
+            self.assertTrue(result["project_state_unchanged"])
+            self.assertEqual(fake.calls[0][1:4], ["exec", "--sandbox", "read-only"])
+
     def test_fixed_read_only_bridge_writes_digest_linked_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); receipt = completed_run(root)
