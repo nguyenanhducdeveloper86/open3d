@@ -63,7 +63,7 @@ app.innerHTML = `
         <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local file or reference path" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
         <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="6">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea></label>
         <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
-        <div class="form-boundary"><i class="ph ph-info"></i><p>This stores a local brief draft. Arbitrary prompt generation stays gated behind a checked-in recipe or an explicitly consented provider.</p></div>
+        <div class="form-boundary"><i class="ph ph-info"></i><p>This saves the brief locally. Choose Codex, Claude Code, or OpenCode in the agent drawer to author and run the Blender build.</p></div>
         <p class="form-status" id="create-status" aria-live="polite"></p>
         <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="primary-action compact" type="submit"><i class="ph ph-floppy-disk"></i>Save asset brief</button></footer>
       </form>
@@ -71,11 +71,11 @@ app.innerHTML = `
     <div class="agent-backdrop" id="agent-backdrop"></div>
     <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
       <header class="agent-header"><div><div class="eyebrow">LOCAL AGENT</div><h2 id="agent-title">Asset edit chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
-      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Allowlisted edits only. Review a patch before it changes the artifact.</span></div>
-      <div class="agent-controls"><label><span>AGENT ADAPTER</span><select id="agent-provider"><option value="local">Local agent</option><option value="codex">Codex</option><option value="claude">Claude Code</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check agent adapters" aria-label="Check agent adapters"><i class="ph ph-arrows-clockwise"></i></button></div>
+      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>External agents write only a staged build.py + asset.json. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass.</span></div>
+      <div class="agent-controls"><label><span>AGENT ADAPTER</span><select id="agent-provider"><option value="local">Local agent</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check agent adapters" aria-label="Check agent adapters"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
-      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: scale spout x 1.2"></textarea><div><span>Local operation</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Send</button></div></form>
+      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div><span id="agent-composer-note">Local operation</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Send</button></div></form>
     </aside>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
   </div>`;
@@ -133,7 +133,7 @@ function renderAgentProviderStatus() {
 }
 
 async function refreshAgents() {
-  const actionId = beginAction("Check agent adapters", "Reading local Codex and Claude CLI versions");
+  const actionId = beginAction("Check agent adapters", "Reading local Codex, Claude Code, and OpenCode CLI versions");
   updateAction(actionId, "running", "Checking installed adapters");
   try {
     state.agents = await api("/api/agents");
@@ -175,7 +175,7 @@ function saveAssetDraft(event) {
   persistDraft(state.assetDraft);
   closeCreateAsset();
   toast(`Saved brief ${id}`, "success");
-  addAgentMessage("agent", `Brief ${id} is ready. Attach a checked-in recipe or provider before asking me to generate it.`);
+  addAgentMessage("agent", `Brief ${id} is ready. Select Codex, Claude Code, or OpenCode, then send the prompt to build it with Blender.`);
   openAgent();
 }
 
@@ -257,14 +257,23 @@ async function submitAgentMessage(event) {
   addAgentMessage("user", text);
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
-  const actionId = beginAction(`${label} request`, state.agentProvider === "local" ? "Parsing allowlisted intents" : "Starting read-only plan");
+  const actionId = beginAction(`${label} request`, state.agentProvider === "local" ? "Parsing allowlisted intents" : "Starting staged Blender build");
   if (state.agentProvider !== "local") {
-    addAgentMessage("agent", `Sending this request to ${label} in plan-only mode. It cannot edit files or run mutation commands.`);
+    addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
+    updateAction(actionId, "running", "Agent is authoring asset.json and build.py");
     try {
-      const result = await api("/api/agent/plan", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 60 }) });
-      const output = (result.output || result.reason || "No plan output").slice(0, 6000);
-      updateAction(actionId, result.status === "PASS" ? "done" : "failed", result.status === "PASS" ? "Read-only plan received" : result.reason || "Agent unavailable");
-      addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
+      const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 900 }) });
+      const output = (result.cli?.stdout || result.error || result.reason || "No build output").slice(0, 6000);
+      if (result.status === "PASS") {
+        updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
+        await refreshAfterMutation();
+        updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
+        addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the local sandbox"}; the GLB, contract, checkpoint, and QA report are now current.`);
+        toast("Agent Blender build completed", "success");
+      } else {
+        updateAction(actionId, "failed", result.reason || "Agent build failed");
+        addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
+      }
     } catch (error) {
       updateAction(actionId, "failed", error.message);
       addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
@@ -598,8 +607,10 @@ document.querySelector("#agent-provider").addEventListener("change", (event) => 
   state.agentProvider = event.target.value;
   const agent = state.agents.find((item) => item.agent_id === state.agentProvider);
   renderAgentProviderStatus();
+  const note = document.querySelector("#agent-composer-note");
+  if (note) note.textContent = state.agentProvider === "local" ? "Local operation" : "Agent build + Blender";
   const actionId = beginAction(`Connect · ${agent?.label || state.agentProvider}`, agent?.status === "READY" ? "Adapter selected" : agent?.reason || "Adapter unavailable");
-  updateAction(actionId, agent?.status === "READY" ? "done" : "failed", agent?.status === "READY" ? "Ready for plan requests" : agent?.reason || "Unavailable");
+  updateAction(actionId, agent?.status === "READY" ? "done" : "failed", agent?.status === "READY" ? (state.agentProvider === "local" ? "Ready for allowlisted edits" : "Ready for build requests") : agent?.reason || "Unavailable");
 });
 document.querySelector("#clear-actions").addEventListener("click", () => { state.actionLog = []; renderAgentActivity(); });
 document.addEventListener("keydown", (event) => {

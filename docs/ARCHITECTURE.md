@@ -25,4 +25,4 @@ The Python contract/CAS/QA core is trusted local code. GLB/contract input is unt
 
 ## Current implementation boundary
 
-The dependency-free procedural generator supplies a deterministic baseline. Its GLB nodes carry `extras.open3d.part_id`, allowing a viewer or engine adapter to resolve semantic parts without parsing arbitrary names. The MCP server maps only to inspect, validate, edit-part, and rollback operations; raw shell, arbitrary path, and Python execution are intentionally absent.
+The dependency-free procedural generator supplies a deterministic baseline. Its GLB nodes carry `extras.open3d.part_id`, allowing a viewer or engine adapter to resolve semantic parts without parsing arbitrary names. The MCP server maps to typed inspect, validate, edit-part, rollback, and agent-build operations. `agent.build` gives an external agent a staging workspace for `asset.json` and `build.py`, then the parent process runs Blender with output-only writes and validates the GLB; raw shell remains absent from the public API.

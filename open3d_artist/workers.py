@@ -14,8 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from .contracts import load_asset
 from .project import Project, ProjectError
-from .geometry import read_glb_json
+from .geometry import patch_glb_metadata, read_glb_json
 
 
 class WorkerError(RuntimeError):
@@ -270,6 +271,71 @@ class BlenderSandbox:
                 command.extend(["--repair-id", repair_id])
         result = run_limited(command, cwd=self.root, timeout=timeout, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output), "TMPDIR": "/tmp", "LANG": "C.UTF-8"})
         return {"sandbox": sandbox_kind, "process": {"status": result.status if result.status != "PASS" else ("PASS" if result.returncode == 0 else "FAIL"), "returncode": result.returncode, "duration_ms": result.duration_ms, "output": result.output}}
+
+    def run_agent_build(self, script: str | Path, contract: str | Path, output: str | Path, *, timeout: float = 900, allow_unsafe: bool = False) -> dict[str, Any]:
+        """Run an agent-authored Blender build script with output-only writes."""
+
+        self._blender_path()
+        script_path = _inside(self.root, script, label="agent build script", must_exist=True)
+        contract_path = _inside(self.root, contract, label="agent asset contract", must_exist=True)
+        output_path = _inside(self.root, output, label="agent build output")
+        if script_path.suffix.lower() != ".py" or contract_path.suffix.lower() not in {".json", ".yaml", ".yml"}:
+            raise ProjectError("agent build requires a Python script and JSON/YAML contract")
+        if output_path.is_symlink():
+            raise ProjectError("agent build output must not be a symlink")
+        output_path.mkdir(parents=True, exist_ok=True)
+        sandbox_kind = self._sandbox_kind()
+        if sandbox_kind is None and not allow_unsafe:
+            raise WorkerUnavailable("real sandbox unavailable; agent Blender builds refuse unsandboxed execution")
+
+        if sandbox_kind == "bubblewrap":
+            script_arg = f"/project/{script_path.relative_to(self.root)}"
+            contract_arg = f"/project/{contract_path.relative_to(self.root)}"
+            command = [self.bwrap, "--die-with-parent", "--unshare-net"]
+            for runtime_path in (Path("/usr"), Path("/lib"), Path("/lib64"), Path("/bin"), Path("/etc"), Path("/opt")):
+                if runtime_path.exists():
+                    command.extend(["--ro-bind", str(runtime_path), str(runtime_path)])
+            command.extend([
+                "--ro-bind", str(self.root), "/project", "--bind", str(output_path), "/output",
+                "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project",
+                str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec",
+                "--python", script_arg, "--", "--contract", contract_arg, "--output", "/output",
+            ])
+        elif sandbox_kind == "macos-sandbox":
+            profile = self._macos_profile(script_path.parent, output_path)
+            command = [
+                self.sandbox_exec, "-p", profile, str(self._blender_path()),
+                "--background", "--factory-startup", "--disable-autoexec", "--python", str(script_path),
+                "--", "--contract", str(contract_path), "--output", str(output_path),
+            ]
+        else:
+            command = [
+                str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec",
+                "--python", str(script_path), "--", "--contract", str(contract_path), "--output", str(output_path),
+            ]
+        clean_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output_path), "TMPDIR": "/tmp", "LANG": "C.UTF-8"}
+        result = run_limited(command, cwd=self.root, timeout=timeout, env=clean_env)
+        status = result.status if result.status != "PASS" else ("PASS" if result.returncode == 0 else "FAIL")
+        response: dict[str, Any] = {
+            "worker": "blender-agent-build",
+            "sandbox": sandbox_kind or "unsafe-explicit",
+            "process": {"status": status, "returncode": result.returncode, "duration_ms": result.duration_ms, "output": result.output},
+        }
+        glb_path = output_path / "asset.glb"
+        blend_path = output_path / "scene.blend"
+        if status == "PASS" and (not glb_path.is_file() or not blend_path.is_file()):
+            response["process"] = {**response["process"], "status": "FAIL", "output": result.output + "\nagent build must emit asset.glb and scene.blend"}
+            return response
+        if status == "PASS":
+            try:
+                asset = load_asset(contract_path)
+                patched = patch_glb_metadata(glb_path.read_bytes(), asset)
+                read_glb_json(patched)
+                glb_path.write_bytes(patched)
+                response["artifacts"] = {"glb": str(glb_path), "blend": str(blend_path)}
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                response["process"] = {**response["process"], "status": "FAIL", "output": result.output + f"\n{exc}"}
+        return response
 
     def _store_glb(self, data: bytes) -> str:
         project = Project(self.root)

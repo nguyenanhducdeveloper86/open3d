@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .agent_bridge import agent_catalog, run_agent_plan
+from .agent_bridge import agent_catalog, run_agent_build, run_agent_plan
 from .project import Project, ProjectError
 from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, repair_production, run_production, verify_release
 from .providers import ConsentRequired, MeshyImageTo3D, ProviderError, provider_catalog
@@ -135,6 +135,8 @@ class _Handler(BaseHTTPRequestHandler):
                     value = production_agent_receipt(body["agent"], body["run"], output_root=body.get("output_root"), timeout=float(body.get("timeout", 30)))
                 elif path == "/api/agent/plan":
                     value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
+                elif path == "/api/agent/build":
+                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)))
                 else:
                     return self._error(HTTPStatus.NOT_FOUND, "route not found")
             self._send(HTTPStatus.OK, value)

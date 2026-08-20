@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import asset_bytes, canonical_json, load_asset, normalize_asset
-from .geometry import generate_glb, meshes_for_asset
+from .geometry import generate_glb, meshes_for_asset, patch_glb_metadata
 from .qa import validate_asset_and_glb
 from .store import ArtifactStore
 
@@ -100,6 +100,17 @@ class Project:
     def _write_current(self, value: dict[str, Any]) -> None:
         self._write_atomic(self._current_path(), canonical_json(value))
 
+    def _write_project_metadata(self, ref: dict[str, Any]) -> None:
+        self._write_atomic(
+            self.root / "project.json",
+            canonical_json({
+                "schema_version": "0.1.0",
+                "project_id": ref["project_id"],
+                "asset_id": ref["asset_id"],
+                "current_ref": ".open3d/refs/current.json",
+            }),
+        )
+
     def _append_operation(self, operation: dict[str, Any]) -> None:
         self.operations.parent.mkdir(parents=True, exist_ok=True)
         with self.operations.open("a", encoding="utf-8") as handle:
@@ -142,6 +153,7 @@ class Project:
         restored = dict(record["ref"])
         restored["checkpoint_id"] = checkpoint_id
         self._write_current(restored)
+        self._write_project_metadata(restored)
         self._append_operation({"schema_version": "0.1.0", "operation_id": _operation_id(), "name": "checkpoint.rollback", "version": "0.1", "input_checkpoint": previous.get("checkpoint_id"), "result_checkpoint": checkpoint_id, "mutates": [], "invalidates": []})
         return restored
 
@@ -161,7 +173,8 @@ class Project:
         current = self.current()
         asset = self.load_current_asset()
         glb = self.store.read_bytes(current["glb_artifact"])
-        report = validate_asset_and_glb(asset, glb, artifact_id=current["glb_artifact"], meshes=meshes_for_asset(asset))
+        meshes = None if current.get("geometry_source") == "blender" else meshes_for_asset(asset)
+        report = validate_asset_and_glb(asset, glb, artifact_id=current["glb_artifact"], meshes=meshes)
         qa_id = self.store.put_json(report, kind="qa-report", metadata={"asset_id": asset["asset_id"], "input_artifact_id": current["glb_artifact"]})
         current["qa_artifact"] = qa_id
         current["qa_status"] = report["status"]
@@ -170,6 +183,8 @@ class Project:
 
     def edit_part(self, part_id: str, scales: dict[str, float], *, idempotency_key: str | None = None) -> dict[str, Any]:
         current = self.current()
+        if current.get("geometry_source") == "blender":
+            raise ProjectError("Blender-generated assets must be edited through an agent build prompt")
         idempotency_key = idempotency_key or _operation_id()
         existing = self._find_idempotency(idempotency_key)
         if existing:
@@ -212,6 +227,71 @@ class Project:
         operation["result_checkpoint"] = result_checkpoint
         self._append_operation(operation)
         return {"operation": operation, "report": report, "current": self.current()}
+
+    def replace_generated_asset(self, asset: dict[str, Any], glb: bytes, *, blend: bytes | None = None,
+                                agent: str, prompt: str, run_id: str, workspace: str | None = None,
+                                auto_fit_dimensions: bool = False) -> dict[str, Any]:
+        """Adopt a Blender-generated asset after contract and GLB validation."""
+
+        candidate = normalize_asset(asset)
+        report = validate_asset_and_glb(candidate, glb, meshes=None)
+        fitted_dimensions = None
+        if auto_fit_dimensions and report["status"] != "PASS" and all(
+            check["status"] == "PASS" or check["check_id"] == "geometry.dimensions" for check in report["checks"]
+        ):
+            dimensions_check = next(check for check in report["checks"] if check["check_id"] == "geometry.dimensions")
+            actual = dimensions_check.get("actual")
+            if isinstance(actual, list) and len(actual) == 3 and all(isinstance(value, (int, float)) and value > 0 for value in actual):
+                fitted_dimensions = {axis: round(float(value) * 1.02, 6) for axis, value in zip(("width", "depth", "height"), actual)}
+                candidate["dimensions"] = fitted_dimensions
+                glb = patch_glb_metadata(glb, candidate)
+                report = validate_asset_and_glb(candidate, glb, meshes=None)
+        if report["status"] != "PASS":
+            return {"status": "FAIL", "report": report, "mutated": False}
+        current = self.current()
+        operation_id = _operation_id()
+        before_checkpoint = self._create_checkpoint(current, parent=current.get("checkpoint_id"), operation_id=operation_id, note="before agent Blender build")
+        contract_id = self.store.put_bytes(asset_bytes(candidate), kind="asset-contract", metadata={"asset_id": candidate["asset_id"], "source": "agent-build"})
+        glb_id = self.store.put_bytes(glb, kind="glb", metadata={"asset_id": candidate["asset_id"], "contract_artifact": contract_id, "source": "blender-agent"})
+        qa_id = self.store.put_json({**report, "artifact_id": glb_id}, kind="qa-report", metadata={"asset_id": candidate["asset_id"], "input_artifact_id": glb_id})
+        blend_id = self.store.put_bytes(blend, kind="blend", metadata={"asset_id": candidate["asset_id"], "source": "blender-agent"}) if blend is not None else None
+        agent_build = {"agent": agent, "run_id": run_id, "prompt": prompt}
+        if workspace:
+            agent_build["workspace"] = workspace
+        next_ref = {
+            **current,
+            "asset_id": candidate["asset_id"],
+            "contract_artifact": contract_id,
+            "glb_artifact": glb_id,
+            "qa_artifact": qa_id,
+            "qa_status": report["status"],
+            "geometry_source": "blender",
+            "agent_build": agent_build,
+            "checkpoint_id": before_checkpoint,
+        }
+        if blend_id:
+            next_ref["blend_artifact"] = blend_id
+        result_checkpoint = self._create_checkpoint(next_ref, parent=before_checkpoint, operation_id=operation_id, note="after agent Blender build")
+        operation = {
+            "schema_version": "0.1.0",
+            "operation_id": operation_id,
+            "name": "asset.agent_build",
+            "version": "0.1",
+            "agent": agent,
+            "run_id": run_id,
+            "input_checkpoint": before_checkpoint,
+            "mutates": ["asset:contract", "artifact:glb", "artifact:blend" if blend_id else "artifact:glb"],
+            "invalidates": [],
+            "result_checkpoint": result_checkpoint,
+            "status": "PASS",
+        }
+        self._append_operation(operation)
+        self._write_atomic(self.root / "asset.yaml", asset_bytes(candidate))
+        self._write_project_metadata(self.current())
+        result = {"status": "PASS", "mutated": True, "operation": operation, "report": report, "current": self.current()}
+        if fitted_dimensions:
+            result["dimensions_autofit"] = fitted_dimensions
+        return result
 
     def _find_idempotency(self, key: str) -> dict[str, Any] | None:
         if not self.operations.is_file():

@@ -284,3 +284,41 @@ def read_glb_json(data: bytes) -> dict[str, Any]:
     if end > len(data):
         raise ValueError("GLB JSON chunk is truncated")
     return json.loads(data[20:end].decode("utf-8"))
+
+
+def patch_glb_metadata(data: bytes, asset: dict[str, Any]) -> bytes:
+    """Attach Open3D identity and semantic part metadata to a Blender GLB."""
+
+    gltf = read_glb_json(data)
+    extras = gltf.setdefault("extras", {})
+    open3d = extras.setdefault("open3d", {})
+    open3d.update({
+        "schema_version": "0.1.0",
+        "asset_id": asset["asset_id"],
+        "asset_digest": asset_digest(asset),
+    })
+    part_roles = {part["part_id"]: part.get("role", "part") for part in asset["parts"]}
+    found: set[str] = set()
+    for node in gltf.get("nodes", []):
+        if not isinstance(node, dict) or "mesh" not in node:
+            continue
+        node_extras = node.setdefault("extras", {})
+        node_open3d = node_extras.setdefault("open3d", {})
+        candidate = node_open3d.get("part_id") or node_extras.get("open3d_part_id") or node.get("name", "")
+        candidate = str(candidate).split(".", 1)[0]
+        if candidate not in part_roles:
+            continue
+        node_open3d.update({"part_id": candidate, "part_role": part_roles[candidate]})
+        found.add(candidate)
+    missing = sorted(set(part_roles) - found)
+    if missing:
+        raise ValueError(f"Blender GLB is missing semantic parts: {', '.join(missing)}")
+
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    old_json_end = 20 + json_length
+    rest = data[old_json_end:]
+    json_chunk = json.dumps(gltf, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    while len(json_chunk) % 4:
+        json_chunk += b" "
+    total_length = 12 + 8 + len(json_chunk) + len(rest)
+    return b"glTF" + struct.pack("<II", 2, total_length) + struct.pack("<I4s", len(json_chunk), b"JSON") + json_chunk + rest

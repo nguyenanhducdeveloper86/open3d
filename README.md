@@ -38,6 +38,8 @@ python -m open3d_artist validate examples/watering-can
 python -m open3d_artist inspect examples/watering-can
 python -m open3d_artist edit-part examples/watering-can spout --scale-x 1.2
 python -m open3d_artist export examples/watering-can /tmp/watering-can.glb
+# Agent-authored Blender build (requires Codex/Claude Code/OpenCode and Blender)
+python -m open3d_artist agent-build examples/watering-can --agent codex --prompt "Build a stylized Scandinavian timber house"
 
 npm ci --prefix web
 npm run build --prefix web
@@ -47,6 +49,8 @@ python -m open3d_artist serve examples/watering-can
 Open `http://127.0.0.1:8289` for the local desktop viewer. The viewer reads the current GLB artifact, supports semantic picking and checkpointed scale edits, and exposes QA, history, and provider status.
 
 The example `asset.yaml` uses JSON syntax, which is valid YAML 1.2, so the core has no runtime dependency. For normal YAML authoring install `pip install -e '.[yaml]'`.
+
+External agent builds are staged under `.open3d/agent-runs/`: the selected agent writes `asset.json` and `build.py`, Open3D executes the script with Blender in the OS sandbox, then verifies semantic parts, triangle budget, dimensions, and GLB identity before checkpointing the new asset. The local agent remains a dependency-free parser for allowlisted edits; it is not an LLM.
 
 ## Repository map
 

@@ -1,7 +1,7 @@
 """Small, typed stdio MCP surface for the local project.
 
-This intentionally exposes project operations only. There is no shell,
-arbitrary filesystem, or Blender-Python execution tool.
+This exposes typed project operations. Agent builds are staged, validated, and
+run through the bounded Blender worker; there is no raw shell tool.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import json
 import sys
 from typing import Any
 
+from .agent_bridge import AGENTS, run_agent_build
 from .project import Project, ProjectError
 from .production import CATALOG, REPAIR_ID, catalog, promote_production, production_agent_receipt, production_state, repair_production, run_production, verify_release
 
@@ -32,7 +33,8 @@ def _tools() -> list[dict[str, Any]]:
         _tool("production.promote", "Promote a verified run into this project with immutable artifacts and a checkpoint.", {"run": {"type": "string"}}, ["run"]),
         _tool("production.repair", "Run the one fixed geometry-changing local repair.", {"run": {"type": "string"}, "repair_id": {"type": "string", "enum": [REPAIR_ID]}}, ["run", "repair_id"]),
         _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
-        _tool("production.agent_receipt", "Run a fixed read-only Codex or Claude review and record evidence.", {"agent": {"type": "string", "enum": ["codex", "claude"]}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
+        _tool("production.agent_receipt", "Run a fixed read-only agent review and record evidence.", {"agent": {"type": "string", "enum": list(AGENTS)}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
+        _tool("agent.build", "Let Codex, Claude Code, or OpenCode author asset.json/build.py, then run the build in the Blender sandbox and adopt a passing GLB.", {"agent": {"type": "string", "enum": list(AGENTS)}, "prompt": {"type": "string", "maxLength": 16384}, "timeout": {"type": "number", "exclusiveMinimum": 0}}, ["agent", "prompt"]),
     ]
 
 
@@ -60,6 +62,8 @@ def _call(project: Project, name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"state": production_state(project), "verification": verify_release(project)}
     if name == "production.agent_receipt":
         return production_agent_receipt(args["agent"], args["run"], output_root=args.get("output_root"))
+    if name == "agent.build":
+        return run_agent_build(args["agent"], args["prompt"], project.root, timeout=args.get("timeout", 900))
     raise ProjectError(f"unknown tool: {name}")
 
 

@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from .agent_bridge import run_agent_build
 from .mcp import serve_stdio
 from .providers import MeshyImageTo3D, ProviderError, provider_catalog
 from .production import promote_production, production_agent_receipt, repair_production, run_production, verify_release
@@ -95,10 +96,15 @@ def build_parser() -> argparse.ArgumentParser:
     release = commands.add_parser("production-release-verify", help="verify promoted release artifacts")
     release.add_argument("project", type=Path)
     agent = commands.add_parser("production-agent-receipt", help="record a read-only Codex or Claude run receipt")
-    agent.add_argument("--agent", choices=("codex", "claude"), required=True)
+    agent.add_argument("--agent", choices=("codex", "claude", "opencode"), required=True)
     agent.add_argument("--run", required=True, type=Path)
     agent.add_argument("--output-root", type=Path)
     agent.add_argument("--timeout", type=float, default=30)
+    build = commands.add_parser("agent-build", help="let an agent author and run a Blender asset build")
+    build.add_argument("project", type=Path)
+    build.add_argument("--agent", choices=("codex", "claude", "opencode"), required=True)
+    build.add_argument("--prompt", required=True)
+    build.add_argument("--timeout", type=float, default=900)
     return parser
 
 
@@ -156,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
             _json(BlenderSandbox(project.root, blender=args.blender, bwrap=args.bwrap, sandbox_exec=args.sandbox_exec).run(job, timeout=args.timeout, allow_unsafe=args.allow_unsafe))
         elif args.command == "provider-run":
             _json(MeshyImageTo3D().generate(project, image_url=args.image_url, consent=args.consent, timeout=args.timeout))
+        elif args.command == "agent-build":
+            _json(run_agent_build(args.agent, args.prompt, project.root, timeout=args.timeout))
         return 0
     except (ProjectError, ProviderError, WorkerError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"open3d: {exc}", file=sys.stderr)
