@@ -4,6 +4,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import "./styles.css";
 
+const REQUIRED_VIEWS = ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"];
+const DEFAULT_HOUSE_PROMPT = "Production-quality stylized Scandinavian timber house prop, single-story modern cabin with a gabled roof, four walls, a door, two windows, and a chimney; clean bevels, separate semantic parts, realistic proportions, neutral studio materials, and six orthographic views.";
+
+function readDraft() {
+  try { return JSON.parse(localStorage.getItem("open3d.asset-draft") || "null"); } catch { return null; }
+}
+
 const state = {
   inspect: null,
   report: null,
@@ -15,6 +22,10 @@ const state = {
   query: "",
   theme: "dark",
   busy: false,
+  createOpen: false,
+  agentOpen: false,
+  assetDraft: readDraft(),
+  agentMessages: [{ role: "agent", text: "I can inspect this contract and propose allowlisted scale edits. Nothing mutates until you approve a patch." }],
 };
 
 const app = document.querySelector("#app");
@@ -30,18 +41,37 @@ app.innerHTML = `
         <button class="nav-item" data-view="providers"><i class="ph ph-sparkle"></i><span>Providers</span></button>
       </nav>
       <div class="sidebar-section">
-        <div class="section-label"><span>PROJECT FILES</span><i class="ph ph-plus"></i></div>
+        <div class="section-label"><span>PROJECT FILES</span><button class="section-action" id="quick-create" aria-label="Create asset"><i class="ph ph-plus"></i></button></div>
         <div class="file-tree"><div class="tree-row folder"><i class="ph ph-folder-open"></i><span>Assets</span></div><div class="tree-row selected"><i class="ph ph-cube"></i><span id="asset-file">asset.yaml</span><span class="tree-status"></span></div><div class="tree-row"><i class="ph ph-file-text"></i><span>QA report</span></div></div>
       </div>
       <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>LOCAL RUNTIME</span><b>READY</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
     </aside>
     <main class="main-shell">
-      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
+      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create asset</span></button><button class="top-action agent-trigger" id="open-agent"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
       <section class="content-shell">
         <div class="content-heading"><div><div class="eyebrow">OPEN3D / LIVE ARTIFACT</div><h1 id="asset-title">Loading asset</h1><p id="asset-subtitle">Preparing the contract and GLB preview</p></div><div class="heading-meta"><span class="status-badge" id="qa-status"><span></span>Checking</span><span class="artifact-id" id="artifact-id">sha256:...</span></div></div>
         <div id="view-root"></div>
       </section>
     </main>
+    <div class="modal-layer" id="create-layer" hidden>
+      <div class="modal-backdrop" data-close-create></div>
+      <form class="create-modal" id="create-form" aria-labelledby="create-title">
+        <header class="modal-header"><div><div class="eyebrow">CREATE ASSET</div><h2 id="create-title">Start from a production brief</h2><p>Save the prompt and reference boundary before a recipe or provider runs.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
+        <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local file or reference path" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
+        <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="6">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea></label>
+        <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
+        <div class="form-boundary"><i class="ph ph-info"></i><p>This stores a local brief draft. Arbitrary prompt generation stays gated behind a checked-in recipe or an explicitly consented provider.</p></div>
+        <p class="form-status" id="create-status" aria-live="polite"></p>
+        <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="primary-action compact" type="submit"><i class="ph ph-floppy-disk"></i>Save asset brief</button></footer>
+      </form>
+    </div>
+    <div class="agent-backdrop" id="agent-backdrop"></div>
+    <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
+      <header class="agent-header"><div><div class="eyebrow">LOCAL AGENT</div><h2 id="agent-title">Asset edit chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
+      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Allowlisted edits only. Review a patch before it changes the artifact.</span></div>
+      <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
+      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: scale spout x 1.2"></textarea><div><span>Local operation</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Send</button></div></form>
+    </aside>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
   </div>`;
 
@@ -61,6 +91,156 @@ function toast(message, tone = "neutral") {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+}
+
+function persistDraft(draft) {
+  try { localStorage.setItem("open3d.asset-draft", JSON.stringify(draft)); } catch { /* localStorage can be disabled in a locked-down browser */ }
+}
+
+function openCreateAsset() {
+  state.createOpen = true;
+  const layer = document.querySelector("#create-layer");
+  layer.hidden = false;
+  document.querySelector("#create-status").textContent = state.assetDraft ? "Loaded the last local brief draft." : "";
+  document.querySelector("#create-id").focus();
+}
+
+function closeCreateAsset() {
+  state.createOpen = false;
+  document.querySelector("#create-layer").hidden = true;
+}
+
+function saveAssetDraft(event) {
+  event.preventDefault();
+  const id = document.querySelector("#create-id").value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+  const prompt = document.querySelector("#create-prompt").value.trim();
+  const referencePath = document.querySelector("#create-reference").value.trim();
+  const status = document.querySelector("#create-status");
+  if (!id || !prompt) { status.textContent = "Asset ID and prompt are required."; return; }
+  state.assetDraft = { schema_version: "0.1.0", brief_id: id, prompt, reference: { path: referencePath, kind: referencePath ? "local-reference" : "not-attached" }, views: REQUIRED_VIEWS, generation: "draft-only" };
+  persistDraft(state.assetDraft);
+  closeCreateAsset();
+  toast(`Saved brief ${id}`, "success");
+  addAgentMessage("agent", `Brief ${id} is ready. Attach a checked-in recipe or provider before asking me to generate it.`);
+  openAgent();
+}
+
+function selectedContractPart(partId = state.selectedPart) {
+  return state.inspect?.contract.parts.find((part) => part.part_id.toLowerCase() === String(partId || "").toLowerCase());
+}
+
+function parseAgentRequest(text) {
+  const scale = text.match(/\bscale\s+([\w.-]+)\s+(x|y|z)(?:\s+(?:by|to))?\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (scale) {
+    const part = selectedContractPart(scale[1]);
+    const factor = Number(scale[3]);
+    if (!part) return { error: `I cannot find part ${scale[1]}. Select a part or use its exact semantic ID.` };
+    if (!Number.isFinite(factor) || factor <= 0 || factor > 10) return { error: "Scale must be a positive number no greater than 10." };
+    return { patch: { partId: part.part_id, scales: { [scale[2].toLowerCase()]: factor } } };
+  }
+  const relative = text.match(/\b(?:make|scale)\s+([\w.-]+)?\s*(larger|bigger|smaller)\b/i);
+  if (relative) {
+    const part = selectedContractPart(relative[1] || state.selectedPart);
+    if (!part) return { error: "Select a semantic part first, then ask me to make it larger or smaller." };
+    return { patch: { partId: part.part_id, scales: { x: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1, y: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1, z: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1 } } };
+  }
+  if (/\b(?:qa|validate|quality)\b/i.test(text)) return { intent: "qa" };
+  if (/\b(?:inspect|parts|contract)\b/i.test(text)) return { intent: "inspect" };
+  return { intent: "help" };
+}
+
+function addAgentMessage(role, text, patch = null) {
+  state.agentMessages.push({ role, text, patch });
+  renderAgentThread();
+}
+
+function renderAgentThread() {
+  const thread = document.querySelector("#agent-thread");
+  if (!thread) return;
+  thread.innerHTML = state.agentMessages.map((message, index) => {
+    const patch = message.patch;
+    const patchState = patch?.status || "pending";
+    const scales = patch ? Object.entries(patch.scales).map(([axis, factor]) => `${axis.toUpperCase()} × ${factor}`).join(" · ") : "";
+    const action = patch && patchState === "pending" ? `<div class="agent-patch-actions"><button class="quiet-button" data-agent-action="reject" data-message-index="${index}">Reject</button><button class="primary-action compact" data-agent-action="apply" data-message-index="${index}">Apply patch</button></div>` : patch ? `<span class="patch-state ${patchState}">${patchState === "applied" ? "Applied" : patchState === "rejected" ? "Rejected" : patchState === "applying" ? "Applying" : "Failed"}</span>` : "";
+    return `<article class="agent-message ${message.role}"><div class="agent-message-meta">${message.role === "agent" ? "LOCAL AGENT" : "YOU"}</div><p>${escapeHtml(message.text)}</p>${patch ? `<div class="agent-patch"><span>PATCH PREVIEW</span><b>${escapeHtml(patch.partId)}</b><small>${escapeHtml(scales)}</small>${action}</div>` : ""}</article>`;
+  }).join("");
+  thread.querySelectorAll("[data-agent-action]").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.messageIndex);
+    if (button.dataset.agentAction === "apply") applyAgentPatch(index);
+    else rejectAgentPatch(index);
+  }));
+  thread.scrollTop = thread.scrollHeight;
+  const selected = selectedContractPart();
+  const context = document.querySelector("#agent-context");
+  if (context) context.textContent = selected ? `Target: ${selected.part_id} · ${selected.role || "semantic part"}` : "Select a part to give the agent a target.";
+}
+
+function openAgent() {
+  state.agentOpen = true;
+  const drawer = document.querySelector("#agent-drawer");
+  drawer.classList.add("is-open");
+  drawer.setAttribute("aria-hidden", "false");
+  document.querySelector("#agent-backdrop").classList.add("is-open");
+  renderAgentThread();
+  document.querySelector("#agent-input").focus();
+}
+
+function closeAgent() {
+  state.agentOpen = false;
+  document.querySelector("#agent-drawer").classList.remove("is-open");
+  document.querySelector("#agent-drawer").setAttribute("aria-hidden", "true");
+  document.querySelector("#agent-backdrop").classList.remove("is-open");
+}
+
+async function submitAgentMessage(event) {
+  event.preventDefault();
+  const input = document.querySelector("#agent-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addAgentMessage("user", text);
+  const request = parseAgentRequest(text);
+  if (request.error) return addAgentMessage("agent", request.error);
+  if (request.patch) return addAgentMessage("agent", `I prepared a reversible scale edit for ${request.patch.partId}. Review the payload before applying it.`, request.patch);
+  if (request.intent === "inspect") {
+    const parts = state.inspect?.contract.parts.map((part) => part.part_id).join(", ") || "no parts loaded";
+    return addAgentMessage("agent", `The current contract exposes ${parts}. Select one and ask for a scale edit.`);
+  }
+  if (request.intent === "qa") {
+    addAgentMessage("agent", "Running deterministic QA against the current GLB and contract...");
+    await runQa();
+    return addAgentMessage("agent", `QA finished with status ${state.report?.status || "UNAVAILABLE"}.`);
+  }
+  addAgentMessage("agent", "I support `scale part-id x 1.2`, `make selected part larger`, contract inspection, and QA. I will always show a patch before mutation.");
+}
+
+async function applyAgentPatch(index) {
+  const message = state.agentMessages[index];
+  if (!message?.patch || message.patch.status) return;
+  const { partId, scales } = message.patch;
+  message.patch.status = "applying";
+  renderAgentThread();
+  try {
+    const body = { part_id: partId, ...Object.fromEntries(Object.entries(scales).map(([axis, factor]) => [`scale_${axis}`, factor])) };
+    await api("/api/edit-part", { method: "POST", body: JSON.stringify(body) });
+    message.patch.status = "applied";
+    message.text = `Applied the approved scale edit to ${partId}. The viewer, QA report, and history are refreshing.`;
+    toast(`Applied agent patch to ${partId}`, "success");
+    await refreshAfterMutation();
+  } catch (error) {
+    message.patch.status = "failed";
+    message.text = `The patch was not applied: ${error.message}`;
+    toast(error.message, "error");
+  }
+  renderAgentThread();
+}
+
+function rejectAgentPatch(index) {
+  const message = state.agentMessages[index];
+  if (!message?.patch || message.patch.status) return;
+  message.patch.status = "rejected";
+  message.text = "Patch rejected. The current artifact was not changed.";
+  renderAgentThread();
 }
 
 async function api(path, options = {}) {
@@ -304,7 +484,21 @@ async function rollback(checkpoint) {
 document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", () => { state.activeView = item.dataset.view; renderView(); }));
 document.querySelector("#validate").addEventListener("click", runQa);
 document.querySelector("#search").addEventListener("input", (event) => { state.query = event.target.value; if (state.activeView === "workspace") renderView(); });
-document.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#search").focus(); } });
+document.querySelector("#create-asset").addEventListener("click", openCreateAsset);
+document.querySelector("#quick-create").addEventListener("click", openCreateAsset);
+document.querySelector("#create-form").addEventListener("submit", saveAssetDraft);
+document.querySelector("#create-close").addEventListener("click", closeCreateAsset);
+document.querySelector("#create-cancel").addEventListener("click", closeCreateAsset);
+document.querySelector("[data-close-create]").addEventListener("click", closeCreateAsset);
+document.querySelector("#open-agent").addEventListener("click", openAgent);
+document.querySelector("#close-agent").addEventListener("click", closeAgent);
+document.querySelector("#agent-backdrop").addEventListener("click", closeAgent);
+document.querySelector("#agent-form").addEventListener("submit", submitAgentMessage);
+document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#search").focus(); }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); state.agentOpen ? closeAgent() : openAgent(); }
+  if (event.key === "Escape") { if (state.createOpen) closeCreateAsset(); else if (state.agentOpen) closeAgent(); }
+});
 document.addEventListener("click", (event) => { if (event.target.closest("#apply-scale")) applyScale(); });
 
 loadState();
