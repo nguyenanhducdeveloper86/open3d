@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .agent_bridge import agent_catalog, run_agent_build, run_agent_plan
+from .agent_bridge import agent_catalog, agent_pool_status, run_agent_build, run_agent_plan
 from .project import Project, ProjectError
 from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, repair_production, run_production, verify_release
 from .providers import ConsentRequired, MeshyImageTo3D, ProviderError, provider_catalog
@@ -84,6 +84,8 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(HTTPStatus.OK, provider_catalog())
                 if path == "/api/agents":
                     return self._send(HTTPStatus.OK, agent_catalog())
+                if path == "/api/agent-pool":
+                    return self._send(HTTPStatus.OK, agent_pool_status())
                 if path == "/api/artifact/current":
                     data = self.server.project.store.read_bytes(self.server.project.current()["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")

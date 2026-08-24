@@ -16,19 +16,24 @@ const state = {
   report: null,
   history: [],
   providers: [],
-  agents: [{ agent_id: "local", label: "Local agent", status: "READY", reason: "ALLOWLISTED_LOCAL", version: "Open3D" }],
+  agents: [
+    { agent_id: "codex", label: "Codex", status: "CHECKING" },
+    { agent_id: "claude", label: "Claude Code", status: "CHECKING" },
+    { agent_id: "opencode", label: "OpenCode", status: "CHECKING" },
+  ],
+  agentPool: { mode: "DIRECT_CLI", status: "CHECKING" },
   production: null,
   activeView: "workspace",
   selectedPart: null,
   query: "",
   theme: "dark",
   busy: false,
-  agentProvider: "local",
+  agentProvider: "codex",
   actionLog: [],
   createOpen: false,
   agentOpen: false,
   assetDraft: readDraft(),
-  agentMessages: [{ role: "agent", text: "I can inspect this contract and propose allowlisted scale edits. Nothing mutates until you approve a patch." }],
+  agentMessages: [{ role: "agent", text: "Choose an active LLM agent. Every prompt is executed by Codex, Claude Code, or OpenCode, then Open3D runs Blender and QA. There is no local agent fallback." }],
 };
 
 const app = document.querySelector("#app");
@@ -47,7 +52,7 @@ app.innerHTML = `
         <div class="section-label"><span>PROJECT FILES</span><button class="section-action" id="quick-create" aria-label="Create asset"><i class="ph ph-plus"></i></button></div>
         <div class="file-tree"><div class="tree-row folder"><i class="ph ph-folder-open"></i><span>Assets</span></div><div class="tree-row selected"><i class="ph ph-cube"></i><span id="asset-file">asset.yaml</span><span class="tree-status"></span></div><div class="tree-row"><i class="ph ph-file-text"></i><span>QA report</span></div></div>
       </div>
-      <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>LOCAL RUNTIME</span><b>READY</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
+      <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>OPEN3D RUNTIME</span><b>READY</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
     </aside>
     <main class="main-shell">
       <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create asset</span></button><button class="top-action agent-trigger" id="open-agent"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
@@ -70,12 +75,12 @@ app.innerHTML = `
     </div>
     <div class="agent-backdrop" id="agent-backdrop"></div>
     <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
-      <header class="agent-header"><div><div class="eyebrow">LOCAL AGENT</div><h2 id="agent-title">Asset edit chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
-      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>External agents write only a staged build.py + asset.json. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass.</span></div>
-      <div class="agent-controls"><label><span>AGENT ADAPTER</span><select id="agent-provider"><option value="local">Local agent</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check agent adapters" aria-label="Check agent adapters"><i class="ph ph-arrows-clockwise"></i></button></div>
+      <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
+      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Codex, Claude Code, and OpenCode author the staged build. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass. No local agent fallback.</span></div>
+      <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
-      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div><span id="agent-composer-note">Local operation</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Send</button></div></form>
+      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
     </aside>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
   </div>`;
@@ -125,22 +130,27 @@ function renderAgentActivity() {
 function renderAgentProviderStatus() {
   const select = document.querySelector("#agent-provider");
   const status = document.querySelector("#agent-provider-status");
+  const poolStatus = document.querySelector("#agent-pool-status");
   if (!select || !status) return;
   select.value = state.agentProvider;
   const agent = state.agents.find((item) => item.agent_id === state.agentProvider) || { status: "UNAVAILABLE", reason: "NOT_FOUND" };
   status.className = `agent-provider-status ${agent.status.toLowerCase()}`;
-  status.textContent = agent.status === "READY" ? `CLI READY${agent.version ? ` · ${agent.version.split("\n")[0].slice(0, 20)}` : ""}` : agent.reason || "UNAVAILABLE";
+  status.textContent = agent.status === "ACTIVE" ? `ACTIVE${state.agentPool?.status === "ACTIVE" ? " · POOL" : " · DIRECT"}` : agent.status === "AUTH_REQUIRED" ? "AUTH REQUIRED" : agent.reason || "UNAVAILABLE";
+  if (poolStatus) {
+    poolStatus.className = `agent-provider-status ${(state.agentPool?.status || "checking").toLowerCase()}`;
+    poolStatus.textContent = state.agentPool?.status === "ACTIVE" ? "POOL ACTIVE" : state.agentPool?.mode === "DIRECT_CLI" ? "DIRECT AUTH" : `POOL ${state.agentPool?.status || "CHECKING"}`;
+  }
 }
 
 async function refreshAgents() {
-  const actionId = beginAction("Check agent adapters", "Reading local Codex, Claude Code, and OpenCode CLI versions");
-  updateAction(actionId, "running", "Checking installed adapters");
+  const actionId = beginAction("Check LLM agents", "Checking Codex, Claude Code, and OpenCode authentication");
+  updateAction(actionId, "running", "Checking external LLM execution");
   try {
-    state.agents = await api("/api/agents");
+    [state.agents, state.agentPool] = await Promise.all([api("/api/agents"), api("/api/agent-pool")]);
     renderAgentProviderStatus();
-    const ready = state.agents.filter((agent) => agent.status === "READY").map((agent) => agent.label).join(", ");
-    updateAction(actionId, "done", ready ? `${ready} available` : "No external CLI available");
-    addAgentMessage("agent", ready ? `Adapters ready: ${ready}. CLI availability does not imply authentication.` : "No external agent CLI is available; Local agent remains ready.");
+    const ready = state.agents.filter((agent) => agent.status === "ACTIVE").map((agent) => agent.label).join(", ");
+    updateAction(actionId, "done", ready ? `${ready} active` : "No authenticated LLM agent");
+    addAgentMessage("agent", ready ? `${ready} active · ${state.agentPool?.status === "ACTIVE" ? "shared pool" : "direct CLI auth"}.` : "No authenticated external LLM agent. The build button is blocked until Codex, Claude Code, or OpenCode is authenticated.");
   } catch (error) {
     updateAction(actionId, "failed", error.message);
     addAgentMessage("agent", `Agent adapter check failed: ${error.message}`);
@@ -183,26 +193,6 @@ function selectedContractPart(partId = state.selectedPart) {
   return state.inspect?.contract.parts.find((part) => part.part_id.toLowerCase() === String(partId || "").toLowerCase());
 }
 
-function parseAgentRequest(text) {
-  const scale = text.match(/\bscale\s+([\w.-]+)\s+(x|y|z)(?:\s+(?:by|to))?\s*([0-9]+(?:\.[0-9]+)?)/i);
-  if (scale) {
-    const part = selectedContractPart(scale[1]);
-    const factor = Number(scale[3]);
-    if (!part) return { error: `I cannot find part ${scale[1]}. Select a part or use its exact semantic ID.` };
-    if (!Number.isFinite(factor) || factor <= 0 || factor > 10) return { error: "Scale must be a positive number no greater than 10." };
-    return { patch: { partId: part.part_id, scales: { [scale[2].toLowerCase()]: factor } } };
-  }
-  const relative = text.match(/\b(?:make|scale)\s+([\w.-]+)?\s*(larger|bigger|smaller)\b/i);
-  if (relative) {
-    const part = selectedContractPart(relative[1] || state.selectedPart);
-    if (!part) return { error: "Select a semantic part first, then ask me to make it larger or smaller." };
-    return { patch: { partId: part.part_id, scales: { x: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1, y: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1, z: relative[2].toLowerCase() === "smaller" ? 0.9 : 1.1 } } };
-  }
-  if (/\b(?:qa|validate|quality)\b/i.test(text)) return { intent: "qa" };
-  if (/\b(?:inspect|parts|contract)\b/i.test(text)) return { intent: "inspect" };
-  return { intent: "help" };
-}
-
 function addAgentMessage(role, text, patch = null) {
   state.agentMessages.push({ role, text, patch });
   renderAgentThread();
@@ -216,7 +206,7 @@ function renderAgentThread() {
     const patchState = patch?.status || "pending";
     const scales = patch ? Object.entries(patch.scales).map(([axis, factor]) => `${axis.toUpperCase()} × ${factor}`).join(" · ") : "";
     const action = patch && patchState === "pending" ? `<div class="agent-patch-actions"><button class="quiet-button" data-agent-action="reject" data-message-index="${index}">Reject</button><button class="primary-action compact" data-agent-action="apply" data-message-index="${index}">Apply patch</button></div>` : patch ? `<span class="patch-state ${patchState}">${patchState === "applied" ? "Applied" : patchState === "rejected" ? "Rejected" : patchState === "applying" ? "Applying" : "Failed"}</span>` : "";
-    return `<article class="agent-message ${message.role}"><div class="agent-message-meta">${message.role === "agent" ? "LOCAL AGENT" : "YOU"}</div><p>${escapeHtml(message.text)}</p>${patch ? `<div class="agent-patch"><span>PATCH PREVIEW</span><b>${escapeHtml(patch.partId)}</b><small>${escapeHtml(scales)}</small>${action}</div>` : ""}</article>`;
+    return `<article class="agent-message ${message.role}"><div class="agent-message-meta">${message.role === "agent" ? "LLM AGENT" : "YOU"}</div><p>${escapeHtml(message.text)}</p>${patch ? `<div class="agent-patch"><span>PATCH PREVIEW</span><b>${escapeHtml(patch.partId)}</b><small>${escapeHtml(scales)}</small>${action}</div>` : ""}</article>`;
   }).join("");
   thread.querySelectorAll("[data-agent-action]").forEach((button) => button.addEventListener("click", () => {
     const index = Number(button.dataset.messageIndex);
@@ -257,46 +247,30 @@ async function submitAgentMessage(event) {
   addAgentMessage("user", text);
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
-  const actionId = beginAction(`${label} request`, state.agentProvider === "local" ? "Parsing allowlisted intents" : "Starting staged Blender build");
-  if (state.agentProvider !== "local") {
-    addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
-    updateAction(actionId, "running", "Agent is authoring asset.json and build.py");
-    try {
-      const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 900 }) });
-      const output = (result.cli?.stdout || result.error || result.reason || "No build output").slice(0, 6000);
-      if (result.status === "PASS") {
-        updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
-        await refreshAfterMutation();
-        updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
-        addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the local sandbox"}; the GLB, contract, checkpoint, and QA report are now current.`);
-        toast("Agent Blender build completed", "success");
-      } else {
-        updateAction(actionId, "failed", result.reason || "Agent build failed");
-        addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
-      }
-    } catch (error) {
-      updateAction(actionId, "failed", error.message);
-      addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
+  const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
+  if (provider?.status !== "ACTIVE") {
+    updateAction(actionId, "failed", provider?.reason || "AUTH_REQUIRED");
+    return addAgentMessage("agent", `${label} is not active (${provider?.reason || "AUTH_REQUIRED"}). Authenticate the external LLM first; Open3D will not use a local fallback.`);
+  }
+  addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
+  updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
+  try {
+    const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 900 }) });
+    const output = (result.cli?.stdout || result.cli?.stderr || result.error || result.reason || "No build output").slice(0, 6000);
+    if (result.status === "PASS") {
+      updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
+      await refreshAfterMutation();
+      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
+      addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the sandbox"}; the GLB, contract, checkpoint, and QA report are now current.`);
+      toast("LLM Blender build completed", "success");
+    } else {
+      updateAction(actionId, "failed", result.reason || "Agent build failed");
+      addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
     }
-    return;
+  } catch (error) {
+    updateAction(actionId, "failed", error.message);
+    addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
   }
-  const request = parseAgentRequest(text);
-  if (request.error) { updateAction(actionId, "failed", request.error); return addAgentMessage("agent", request.error); }
-  if (request.patch) { updateAction(actionId, "done", "Patch preview ready for approval"); return addAgentMessage("agent", `I prepared a reversible scale edit for ${request.patch.partId}. Review the payload before applying it.`, request.patch); }
-  if (request.intent === "inspect") {
-    const parts = state.inspect?.contract.parts.map((part) => part.part_id).join(", ") || "no parts loaded";
-    updateAction(actionId, "done", "Contract inspected");
-    return addAgentMessage("agent", `The current contract exposes ${parts}. Select one and ask for a scale edit.`);
-  }
-  if (request.intent === "qa") {
-    addAgentMessage("agent", "Running deterministic QA against the current GLB and contract...");
-    updateAction(actionId, "running", "Validating current GLB and contract");
-    await runQa("agent");
-    updateAction(actionId, state.report?.status === "PASS" ? "done" : "failed", `QA ${state.report?.status || "UNAVAILABLE"}`);
-    return addAgentMessage("agent", `QA finished with status ${state.report?.status || "UNAVAILABLE"}.`);
-  }
-  updateAction(actionId, "done", "Help response ready");
-  addAgentMessage("agent", "I support `scale part-id x 1.2`, `make selected part larger`, contract inspection, and QA. I will always show a patch before mutation.");
 }
 
 async function applyAgentPatch(index) {
@@ -349,7 +323,13 @@ async function loadState() {
     state.history = history;
     state.providers = providers;
     state.production = await api("/api/production/state").catch((error) => ({ status: "UNAVAILABLE", error: error.message }));
-    state.agents = await api("/api/agents").catch(() => state.agents);
+    [state.agents, state.agentPool] = await Promise.all([
+      api("/api/agents").catch(() => state.agents),
+      api("/api/agent-pool").catch(() => state.agentPool),
+    ]);
+    if (!state.agents.some((agent) => agent.agent_id === state.agentProvider && agent.status === "ACTIVE")) {
+      state.agentProvider = state.agents.find((agent) => agent.status === "ACTIVE")?.agent_id || "codex";
+    }
     state.selectedPart = inspect.contract.parts[0]?.part_id || null;
     hydrateHeader();
     renderView();
@@ -408,12 +388,10 @@ function renderWorkspace() {
   const contract = state.inspect.contract;
   const query = state.query.toLowerCase();
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
-  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="frame-tool" title="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Drag to orbit</span><span>Scroll to zoom</span></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div><div class="command-bar"><div class="command-icon"><i class="ph ph-magic-wand"></i></div><input id="command-input" placeholder="Describe a direct edit, for example: scale spout x 1.2" /><button id="command-run"><span>Apply</span><i class="ph ph-arrow-up-right"></i></button><span class="command-note">Local operation</span></div>`;
+  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="frame-tool" title="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Drag to orbit</span><span>Scroll to zoom</span></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
   document.querySelector("#part-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => selectPart(button.dataset.part)));
   document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; renderView(); highlightPart(null); });
-  document.querySelector("#command-run").addEventListener("click", runCommand);
-  document.querySelector("#command-input").addEventListener("keydown", (event) => { if (event.key === "Enter") runCommand(); });
   document.querySelector("#frame-tool").addEventListener("click", frameAsset);
   document.querySelector("#grid-tool").addEventListener("click", toggleGrid);
   mountViewer();
@@ -576,12 +554,6 @@ async function applyScale() {
   try { state.busy = true; await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: partId, scale_x: values.x, scale_y: values.y, scale_z: values.z }) }); toast(`Scaled ${partId}`, "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); } finally { state.busy = false; }
 }
 
-async function runCommand() {
-  const input = document.querySelector("#command-input"); const match = input?.value.match(/^scale\s+([\w.-]+)\s+([xyz])\s+([\d.]+)$/i);
-  if (!match) return toast("Use: scale part-id x 1.2", "neutral");
-  try { await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: match[1], [`scale_${match[2].toLowerCase()}`]: Number(match[3]) }) }); toast(`Applied scale to ${match[1]}`, "success"); input.value = ""; await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); }
-}
-
 async function refreshAfterMutation() { const [inspect, report, history] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history")]); state.inspect = inspect; state.report = report; state.history = history; viewer.data = null; hydrateHeader(); renderView(); await loadArtifact(); }
 
 async function rollback(checkpoint) {
@@ -608,9 +580,9 @@ document.querySelector("#agent-provider").addEventListener("change", (event) => 
   const agent = state.agents.find((item) => item.agent_id === state.agentProvider);
   renderAgentProviderStatus();
   const note = document.querySelector("#agent-composer-note");
-  if (note) note.textContent = state.agentProvider === "local" ? "Local operation" : "Agent build + Blender";
-  const actionId = beginAction(`Connect · ${agent?.label || state.agentProvider}`, agent?.status === "READY" ? "Adapter selected" : agent?.reason || "Adapter unavailable");
-  updateAction(actionId, agent?.status === "READY" ? "done" : "failed", agent?.status === "READY" ? (state.agentProvider === "local" ? "Ready for allowlisted edits" : "Ready for build requests") : agent?.reason || "Unavailable");
+  if (note) note.textContent = "LLM agent → Blender → QA";
+  const actionId = beginAction(`Connect · ${agent?.label || state.agentProvider}`, agent?.status === "ACTIVE" ? "External LLM selected" : agent?.reason || "Agent unavailable");
+  updateAction(actionId, agent?.status === "ACTIVE" ? "done" : "failed", agent?.status === "ACTIVE" ? "Ready for build requests" : agent?.reason || "Unavailable");
 });
 document.querySelector("#clear-actions").addEventListener("click", () => { state.actionLog = []; renderAgentActivity(); });
 document.addEventListener("keydown", (event) => {

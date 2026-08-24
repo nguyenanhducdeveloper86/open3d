@@ -1,10 +1,12 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from open3d_artist.agent_bridge import run_agent_build, run_agent_plan, run_production_agent
+from open3d_artist.agent_bridge import agent_catalog, agent_pool_status, run_agent_build, run_agent_plan, run_production_agent
 from open3d_artist.contracts import digest_json
 from open3d_artist.geometry import generate_glb
 from open3d_artist.project import Project, ProjectError
@@ -100,6 +102,41 @@ class ProductionAgentReceiptTests(unittest.TestCase):
             failed = run_production_agent("codex", root, runner=fake, which=lambda _: "/bin/fake")
             self.assertEqual(failed["status"], "FAILED")
             self.assertLessEqual(len(failed["stdout"]), 16 * 1024 + len("...[truncated]"))
+
+    def test_catalog_exposes_only_authenticated_external_agents(self):
+        def runner(argv, **kwargs):
+            if argv[-1] == "--version":
+                return SimpleNamespace(returncode=0, stdout=(argv[0] + " 1\n").encode(), stderr=b"")
+            if argv[1:3] == ["login", "status"]:
+                return SimpleNamespace(returncode=0, stdout=b"Logged in using ChatGPT\n", stderr=b"")
+            if argv[1:4] == ["auth", "status", "--json"]:
+                return SimpleNamespace(returncode=0, stdout=b'{"loggedIn":true}\n', stderr=b"")
+            return SimpleNamespace(returncode=0, stdout=b"Credentials\n2 credentials\n", stderr=b"")
+
+        with patch.dict(os.environ, {}, clear=True):
+            agents = agent_catalog(runner=runner, which=lambda agent: f"/bin/{agent}")
+        self.assertEqual([agent["agent_id"] for agent in agents], ["codex", "claude", "opencode"])
+        self.assertTrue(all(agent["status"] == "ACTIVE" and agent["execution"] == "READY" for agent in agents))
+
+    def test_shared_pool_is_authenticated_without_echoing_token(self):
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        def opener(request, timeout=0):
+            self.assertEqual(request.full_url, "https://router.example/v1/models")
+            self.assertTrue(request.get_header("Authorization").endswith("secret"))
+            return Response()
+
+        with patch.dict(os.environ, {"OPEN3D_AGENT_POOL_URL": "https://router.example", "OPEN3D_AGENT_POOL_TOKEN": "secret"}, clear=False):
+            result = agent_pool_status(opener=opener)
+        self.assertEqual(result["status"], "ACTIVE")
+        self.assertNotIn("secret", json.dumps(result))
 
 
 if __name__ == "__main__":

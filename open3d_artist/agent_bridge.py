@@ -8,8 +8,11 @@ import shutil
 import subprocess
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit, urlunsplit
 
 from .contracts import digest_json, load_asset
 from .project import Project, ProjectError
@@ -20,6 +23,9 @@ MAX_PLAN_PROMPT = 8 * 1024
 MAX_BUILD_TIMEOUT = 900.0
 MAX_BUILD_PROMPT = 16 * 1024
 AGENTS = ("codex", "claude", "opencode")
+POOL_URL_ENV = "OPEN3D_AGENT_POOL_URL"
+POOL_TOKEN_ENV = "OPEN3D_AGENT_POOL_TOKEN"
+POOL_MODEL_ENV = "OPEN3D_AGENT_POOL_MODEL"
 
 
 def _agent_label(agent: str) -> str:
@@ -29,6 +35,112 @@ def _agent_label(agent: str) -> str:
 def _bounded(value: bytes | str) -> str:
     text = value.decode("utf-8", "replace") if isinstance(value, bytes) else value
     return text[:MAX_OUTPUT] + ("...[truncated]" if len(text) > MAX_OUTPUT else "")
+
+
+def _pool_config() -> dict[str, str]:
+    return {
+        "url": os.environ.get(POOL_URL_ENV, "").strip().rstrip("/"),
+        "token": os.environ.get(POOL_TOKEN_ENV, "").strip(),
+        "model": os.environ.get(POOL_MODEL_ENV, "auto").strip() or "auto",
+    }
+
+
+def _safe_url(value: str) -> str:
+    parsed = urlsplit(value)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _pool_v1_url(url: str) -> str:
+    return url if url.endswith("/v1") else f"{url}/v1"
+
+
+def agent_pool_status(*, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Any]:
+    """Report the optional shared OpenAI-compatible LLM pool without exposing its token."""
+
+    config = _pool_config()
+    if not config["url"] and not config["token"]:
+        return {"mode": "DIRECT_CLI", "status": "NOT_CONFIGURED", "reason": "DIRECT_CLI_AUTH"}
+    if not config["url"]:
+        return {"mode": "SHARED_POOL", "status": "CONFIG_ERROR", "reason": "POOL_URL_REQUIRED"}
+    if not config["token"]:
+        return {"mode": "SHARED_POOL", "status": "AUTH_REQUIRED", "reason": "POOL_TOKEN_REQUIRED", "url": _safe_url(config["url"])}
+    request = urllib.request.Request(
+        f"{_pool_v1_url(config['url'])}/models",
+        headers={"Authorization": f"Bearer {config['token']}", "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with opener(request, timeout=2) as response:
+            status_code = int(getattr(response, "status", 200))
+        if status_code >= 400:
+            reason = "POOL_AUTH_REQUIRED" if status_code in (401, 403) else "POOL_HTTP_ERROR"
+            return {"mode": "SHARED_POOL", "status": "AUTH_REQUIRED" if status_code in (401, 403) else "UNAVAILABLE", "reason": reason, "http_status": status_code, "url": _safe_url(config["url"]), "model": config["model"]}
+    except urllib.error.HTTPError as exc:
+        reason = "POOL_AUTH_REQUIRED" if exc.code in (401, 403) else "POOL_HTTP_ERROR"
+        return {"mode": "SHARED_POOL", "status": "AUTH_REQUIRED" if exc.code in (401, 403) else "UNAVAILABLE", "reason": reason, "http_status": exc.code, "url": _safe_url(config["url"]), "model": config["model"]}
+    except (OSError, urllib.error.URLError, TimeoutError):
+        return {"mode": "SHARED_POOL", "status": "UNAVAILABLE", "reason": "POOL_UNREACHABLE", "url": _safe_url(config["url"]), "model": config["model"]}
+    return {"mode": "SHARED_POOL", "status": "ACTIVE", "reason": "POOL_AUTHENTICATED", "url": _safe_url(config["url"]), "model": config["model"]}
+
+
+def _agent_environment(agent: str, executable: str, *, build: bool) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["PATH"] = os.path.dirname(executable) + os.pathsep + environment.get("PATH", "")
+    environment["LANG"] = "C.UTF-8" if build else "C"
+    environment["LC_ALL"] = environment["LANG"]
+    config = _pool_config()
+    if config["url"]:
+        # 9router's Codex integration uses the gateway root; Anthropic/OpenCode use /v1.
+        environment["OPENAI_BASE_URL"] = config["url"]
+        environment["OPENAI_API_KEY"] = config["token"]
+        environment["ANTHROPIC_BASE_URL"] = _pool_v1_url(config["url"])
+        environment["ANTHROPIC_API_KEY"] = config["token"]
+        environment["ANTHROPIC_AUTH_TOKEN"] = config["token"]
+        if agent == "opencode":
+            environment["OPENCODE_CONFIG_CONTENT"] = json.dumps({
+                "$schema": "https://opencode.ai/config.json",
+                "model": f"open3d-pool/{config['model']}",
+                "provider": {
+                    "open3d-pool": {
+                        "npm": "@ai-sdk/openai-compatible",
+                        "name": "Open3D shared LLM pool",
+                        "options": {
+                            "baseURL": _pool_v1_url(config["url"]),
+                            "apiKey": "{env:OPEN3D_AGENT_POOL_TOKEN}",
+                        },
+                        "models": {config["model"]: {"name": config["model"]}},
+                    }
+                },
+            })
+    return environment
+
+
+def _auth_probe(agent: str, executable: str, *, runner: Callable[..., Any]) -> dict[str, str]:
+    command = {
+        "codex": [executable, "login", "status"],
+        "claude": [executable, "auth", "status", "--json"],
+        "opencode": [executable, "auth", "list"],
+    }[agent]
+    try:
+        result = runner(command, cwd=os.getcwd(), input=b"", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        timeout=10, env=_agent_environment(agent, executable, build=False), check=False)
+    except (OSError, subprocess.SubprocessError):
+        return {"status": "AUTH_REQUIRED", "reason": "AUTH_CHECK_FAILED"}
+    output = _bounded((getattr(result, "stdout", b"") or getattr(result, "stderr", b"")) or b"").strip()
+    if getattr(result, "returncode", 1) != 0:
+        return {"status": "AUTH_REQUIRED", "reason": "AUTH_CHECK_FAILED"}
+    lowered = output.lower()
+    authenticated = False
+    if agent == "codex":
+        authenticated = "logged in" in lowered or "authenticated" in lowered
+    elif agent == "claude":
+        try:
+            authenticated = bool(json.loads(output).get("loggedIn"))
+        except (json.JSONDecodeError, AttributeError):
+            authenticated = "loggedin" in lowered and "true" in lowered
+    else:
+        authenticated = "credentials" in lowered and "0 credentials" not in lowered
+    return {"status": "ACTIVE" if authenticated else "AUTH_REQUIRED", "reason": "AUTHENTICATED" if authenticated else "AUTH_REQUIRED"}
 
 
 def _receipt_from_output(output: str) -> Any:
@@ -61,45 +173,56 @@ def _reported_digest(value: Any) -> str | None:
     return None
 
 
-def _run_command(command: list[str], *, prompt: str, cwd: Path, timeout: float, runner: Callable[..., Any]) -> Any:
-    environment = {"PATH": os.path.dirname(command[0]), "LANG": "C", "LC_ALL": "C"}
+def _run_command(command: list[str], *, prompt: str, cwd: Path, timeout: float, runner: Callable[..., Any], environment: dict[str, str] | None = None) -> Any:
+    environment = environment or {"PATH": os.path.dirname(command[0]), "LANG": "C", "LC_ALL": "C"}
     return runner(command, cwd=str(cwd), input=prompt.encode("utf-8"), stdout=subprocess.PIPE,
                   stderr=subprocess.PIPE, timeout=timeout, env=environment, check=False)
 
 
-def _agent_command(agent: str, executable: str) -> list[str]:
+def _agent_command(agent: str, executable: str, *, build: bool = False, cwd: Path | None = None) -> list[str]:
     if agent == "codex":
-        return [executable, "exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "-"]
+        command = [executable, "exec", "--sandbox", "workspace-write" if build else "read-only", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config"]
+        if build and cwd is not None:
+            command.extend(["--cd", str(cwd)])
+        return command
     if agent == "claude":
-        return [executable, "-p", "--bare", "--no-session-persistence", "--permission-mode", "plan", "--disallowed-tools", "Edit,Write,NotebookEdit,Bash", "--output-format", "text"]
+        command = [executable, "-p", "--no-session-persistence", "--permission-mode", "acceptEdits" if build else "plan"]
+        if build:
+            command.extend(["--allowed-tools", "Read,Edit,Write", "--disallowed-tools", "Bash,WebFetch,WebSearch"])
+        else:
+            command.extend(["--disallowed-tools", "Edit,Write,NotebookEdit,Bash"])
+        return [*command, "--output-format", "text"]
     return [executable, "run", "--format", "default", "--auto"]
 
 
 def _run_agent_command(agent: str, executable: str, prompt: str, *, cwd: Path, timeout: float,
                        runner: Callable[..., Any], build: bool = False) -> Any:
     if agent == "opencode":
-        command = [executable, "run", "--dir", str(cwd), "--format", "default", "--auto", prompt]
+        command = [executable, "run", "--dir", str(cwd), "--format", "default", "--auto"]
+        pool = _pool_config()
+        if pool["url"]:
+            command.extend(["--model", f"open3d-pool/{pool['model']}"])
+        command.append(prompt)
         input_value = b""
     else:
-        command = _agent_command(agent, executable)
-        if build:
-            if agent == "codex":
-                command = [executable, "exec", "--sandbox", "workspace-write", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--cd", str(cwd), "-"]
-            else:
-                command = [executable, "-p", "--bare", "--no-session-persistence", "--permission-mode", "acceptEdits", "--allowed-tools", "Read,Edit,Write", "--disallowed-tools", "Bash,WebFetch,WebSearch", "--add-dir", str(cwd), "--output-format", "text"]
+        command = _agent_command(agent, executable, build=build, cwd=cwd)
+        pool = _pool_config()
+        if pool["url"] and agent in ("codex", "claude"):
+            command.extend(["--model", pool["model"]])
+        if agent == "codex":
+            command.append("-")
+        elif agent == "claude" and build:
+            command.extend(["--add-dir", str(cwd)])
         input_value = prompt.encode("utf-8")
-    environment = os.environ.copy() if build else {"PATH": os.path.dirname(executable), "LANG": "C", "LC_ALL": "C"}
-    if build:
-        environment["PATH"] = os.path.dirname(executable) + os.pathsep + os.environ.get("PATH", "")
-        environment["LANG"] = "C.UTF-8"
-        environment["LC_ALL"] = "C.UTF-8"
+    environment = _agent_environment(agent, executable, build=build)
     return runner(command, cwd=str(cwd), input=input_value, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                   timeout=timeout, env=environment, check=False)
 
 
 def agent_catalog(*, runner: Callable[..., Any] = subprocess.run,
                   which: Callable[[str], str | None] = shutil.which) -> list[dict[str, Any]]:
-    result = [{"agent_id": "local", "label": "Local agent", "status": "READY", "reason": "ALLOWLISTED_LOCAL", "version": "Open3D"}]
+    pool = agent_pool_status()
+    result = []
     for agent in AGENTS:
         executable = which(agent)
         if executable is None:
@@ -109,11 +232,22 @@ def agent_catalog(*, runner: Callable[..., Any] = subprocess.run,
             value = runner([executable, "--version"], cwd=os.getcwd(), input=b"", stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE, timeout=10, env={"PATH": os.path.dirname(executable), "LANG": "C", "LC_ALL": "C"}, check=False)
             output = _bounded((getattr(value, "stdout", b"") or getattr(value, "stderr", b"")) or b"").strip()
-            status = "READY" if getattr(value, "returncode", 1) == 0 else "UNAVAILABLE"
-            reason = "CLI_AVAILABLE" if status == "READY" else "CLI_VERSION_FAILED"
+            status = "CLI_READY" if getattr(value, "returncode", 1) == 0 else "UNAVAILABLE"
+            reason = "CLI_AVAILABLE" if status == "CLI_READY" else "CLI_VERSION_FAILED"
         except (OSError, subprocess.SubprocessError):
             output, status, reason = "", "UNAVAILABLE", "CLI_UNAVAILABLE"
-        result.append({"agent_id": agent, "label": _agent_label(agent), "status": status, "reason": reason, "version": output or None})
+        item = {"agent_id": agent, "label": _agent_label(agent), "status": status, "reason": reason, "version": output or None}
+        if status == "CLI_READY":
+            auth = ({"status": pool["status"], "reason": pool["reason"]}
+                    if pool["mode"] == "SHARED_POOL"
+                    else _auth_probe(agent, executable, runner=runner))
+            if auth["status"] == "ACTIVE":
+                item.update(status="ACTIVE", reason=auth["reason"], execution="READY")
+            elif pool["mode"] == "SHARED_POOL":
+                item.update(status="AUTH_REQUIRED", reason=auth["reason"], execution="BLOCKED")
+            else:
+                item.update(status=auth["status"], reason=auth["reason"], execution="BLOCKED")
+        result.append(item)
     return result
 
 
@@ -135,6 +269,9 @@ def run_agent_plan(agent: str, prompt: str, project: str | Path, *, timeout: flo
     executable = which(agent)
     if executable is None:
         return {"status": "UNAVAILABLE", "agent": agent, "reason": "CLI_NOT_INSTALLED", "output": ""}
+    pool = agent_pool_status()
+    if pool["mode"] == "SHARED_POOL" and pool["status"] != "ACTIVE":
+        return {"status": "UNAVAILABLE", "agent": agent, "reason": pool["reason"], "pool": pool, "output": ""}
     instruction = ("Read-only Open3D asset planning request. Inspect the current contract, semantic parts, and QA state in this project. "
                    "Return a concise plan and, if useful, a proposed allowlisted edit. Do not edit files, run commands, or claim that a mutation happened.\n\n"
                    f"User request: {prompt.strip()}")
@@ -143,7 +280,7 @@ def run_agent_plan(agent: str, prompt: str, project: str | Path, *, timeout: flo
     try:
         completed = _run_agent_command(agent, executable, instruction, cwd=project_path, timeout=float(timeout), runner=runner)
         status = "PASS" if completed.returncode == 0 else "FAILED"
-        reason = "PLAN_COMPLETE" if status == "PASS" else "CLI_FAILED"
+        reason = "PLAN_COMPLETE" if status == "PASS" else _cli_failure_reason(completed)
     except subprocess.TimeoutExpired as exc:
         status, reason, completed = "FAILED", "CLI_TIMEOUT", exc
     except (OSError, subprocess.SubprocessError) as exc:
@@ -179,6 +316,14 @@ Build rules:
 The file current_asset.json contains the current asset contract. If previous_build.py exists, use it as the editable source for an edit request. Preserve existing semantic part IDs where possible and change only what the user asked for. You may replace the previous build with a better one, but write the two required files before finishing."""
 
 
+def _cli_failure_reason(completed: Any) -> str:
+    output = _bounded(getattr(completed, "stdout", b"") or b"") + "\n" + _bounded(getattr(completed, "stderr", b"") or b"")
+    lowered = output.lower()
+    if any(marker in lowered for marker in ("not logged in", "authentication", "unauthorized", "api key", "login required", '"loggedin": false')):
+        return "AUTH_REQUIRED"
+    return "CLI_FAILED"
+
+
 def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: float = 900,
                     runner: Callable[..., Any] = subprocess.run,
                     which: Callable[[str], str | None] = shutil.which,
@@ -201,6 +346,9 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     started = time.time()
     if executable is None:
         return {"status": "UNAVAILABLE", "agent": agent, "reason": "CLI_NOT_INSTALLED", "project_state_unchanged": True, "output": ""}
+    pool = agent_pool_status()
+    if pool["mode"] == "SHARED_POOL" and pool["status"] != "ACTIVE":
+        return {"status": "UNAVAILABLE", "agent": agent, "reason": pool["reason"], "pool": pool, "project_state_unchanged": True, "output": ""}
 
     agent_root = project_path / ".open3d" / "agent-runs"
     if agent_root.is_symlink():
@@ -232,7 +380,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     try:
         completed = _run_agent_command(agent, executable, instruction, cwd=workspace, timeout=float(timeout), runner=runner, build=True)
         cli_status = "PASS" if completed.returncode == 0 else "FAILED"
-        cli_reason = "BUILD_FILES_READY" if cli_status == "PASS" else "CLI_FAILED"
+        cli_reason = "BUILD_FILES_READY" if cli_status == "PASS" else _cli_failure_reason(completed)
     except subprocess.TimeoutExpired as exc:
         cli_status, cli_reason, completed = "FAILED", "CLI_TIMEOUT", exc
     except (OSError, subprocess.SubprocessError) as exc:
@@ -242,6 +390,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     common = {
         "schema_version": "0.1.0", "agent": agent, "run": str(run_dir.relative_to(project_path)),
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
+        "pool": pool,
         "cli": {"status": cli_status, "reason": cli_reason, "executable": executable, "stdout": stdout, "stderr": stderr,
                 "exit_status": getattr(completed, "returncode", None)},
         "started_at": started, "ended_at": time.time(), "mutations": "NONE", "project_state_unchanged": True,
@@ -319,7 +468,7 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
         argv = ["codex", "exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check",
                 "--ignore-user-config", "-"]
     elif agent == "claude":
-        argv = ["claude", "-p", "--bare", "--no-session-persistence", "--permission-mode", "plan",
+        argv = ["claude", "-p", "--no-session-persistence", "--permission-mode", "plan",
                 "--disallowed-tools", "Edit,Write,NotebookEdit,Bash", "--output-format", "json"]
     else:
         argv = ["opencode", "run", "--dir", str(run_path), "--format", "default", "--auto"]
@@ -329,15 +478,23 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
     try:
         if executable is None:
             raise FileNotFoundError(agent)
+        pool = agent_pool_status()
+        if pool["mode"] == "SHARED_POOL" and pool["status"] != "ACTIVE":
+            result = {"schema_version": "0.1.0", "status": "UNAVAILABLE", "agent": agent, "reason": pool["reason"],
+                      "production_receipt_digest": receipt_digest, "run": str(run_path), "pool": pool,
+                      "mutations": "NONE", "production_state_unchanged": True}
+            (run_path / "agent_process_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
         version_result = runner([executable, "--version"], cwd=str(run_path), input=b"",
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
                                 env={"PATH": os.path.dirname(executable), "LANG": "C", "LC_ALL": "C"}, check=False)
         version = _bounded(getattr(version_result, "stdout", b"") or getattr(version_result, "stderr", b"") or b"").strip()
         if agent == "opencode":
             completed = runner(command + [prompt], cwd=str(run_path), input=b"", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                timeout=float(timeout), env=os.environ.copy(), check=False)
+                                timeout=float(timeout), env=_agent_environment(agent, executable, build=False), check=False)
         else:
-            completed = _run_command(command, prompt=prompt, cwd=run_path, timeout=float(timeout), runner=runner)
+            completed = _run_command(command, prompt=prompt, cwd=run_path, timeout=float(timeout), runner=runner,
+                                     environment=_agent_environment(agent, executable, build=False))
         status = "FAILED" if completed.returncode != 0 else "UNAVAILABLE"
         reason = "CLI_FAILED" if completed.returncode != 0 else "STRUCTURED_RECEIPT_MISSING"
     except subprocess.TimeoutExpired as exc:

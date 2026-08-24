@@ -1,6 +1,6 @@
 # Open3D Artist
 
-Open3D Artist is a local-first, contract-first pipeline for building and validating small 3D assets. It is designed for artists and agents that need inspectable artifacts, semantic parts, deterministic checks, and safe rollback instead of an opaque mesh-generation demo.
+Open3D Artist is a contract-first pipeline for building and validating small 3D assets. It is designed for artists and external LLM agents that need inspectable artifacts, semantic parts, deterministic checks, and safe rollback instead of an opaque mesh-generation demo.
 
 The repository ships a runnable v0.1 local production slice:
 
@@ -46,11 +46,21 @@ npm run build --prefix web
 python -m open3d_artist serve examples/watering-can
 ```
 
-Open `http://127.0.0.1:8289` for the local desktop viewer. The viewer reads the current GLB artifact, supports semantic picking and checkpointed scale edits, and exposes QA, history, and provider status.
+Open `http://127.0.0.1:8289` for the desktop viewer. The viewer reads the current GLB artifact, supports semantic picking and checkpointed edits, and sends build prompts only to authenticated Codex, Claude Code, or OpenCode agents.
 
 The example `asset.yaml` uses JSON syntax, which is valid YAML 1.2, so the core has no runtime dependency. For normal YAML authoring install `pip install -e '.[yaml]'`.
 
-External agent builds are staged under `.open3d/agent-runs/`: the selected agent writes `asset.json` and `build.py`, Open3D executes the script with Blender in the OS sandbox, then verifies semantic parts, triangle budget, dimensions, and GLB identity before checkpointing the new asset. The local agent remains a dependency-free parser for allowlisted edits; it is not an LLM.
+External agent builds are staged under `.open3d/agent-runs/`: the selected agent writes `asset.json` and `build.py`, Open3D executes the script with Blender in the OS sandbox, then verifies semantic parts, triangle budget, dimensions, and GLB identity before checkpointing the new asset. There is no local-agent fallback.
+
+To route all three CLIs through one 9router-style token pool, copy `.env.example`, replace the token, export it, and start the server:
+
+```bash
+cp .env.example .env
+set -a; . ./.env; set +a
+python -m open3d_artist serve examples/watering-can
+```
+
+Open3D probes `${OPEN3D_AGENT_POOL_URL}/v1/models`; a failed pool probe blocks every agent instead of silently switching to direct credentials. Leave the pool variables unset to use each CLI's own authenticated session.
 
 ## Repository map
 
