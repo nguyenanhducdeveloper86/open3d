@@ -36,6 +36,7 @@ const state = {
   agentOpen: false,
   assetDraft: readDraft(),
   referenceImage: null,
+  build: { status: "idle", agent: "", startedAt: 0 },
   agentMessages: [{ role: "agent", text: "Choose an active LLM agent. Every prompt is executed by Codex, Claude Code, or OpenCode, then Open3D runs Blender and QA. There is no local agent fallback." }],
 };
 
@@ -82,11 +83,13 @@ app.innerHTML = `
     <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
       <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
       <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Codex, Claude Code, and OpenCode author the staged build. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass. No local agent fallback.</span></div>
+      <section class="build-state" id="agent-build-state" hidden aria-live="polite"><div class="build-state-header"><span class="build-state-pulse"></span><div><b>BUILD IN PROGRESS</b><small id="build-state-detail">External LLM is authoring the staged build</small></div><time id="build-state-elapsed">00:00</time></div><div class="build-progress" aria-hidden="true"><span></span></div><p><i class="ph ph-lock-key"></i>Request locked. Keep this window open or close it safely; the build continues and duplicate runs are blocked.</p></section>
       <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
       <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div class="agent-attachment" id="agent-attachment" hidden><i class="ph ph-image-square"></i><span id="agent-attachment-name"></span><button class="icon-button" type="button" id="agent-attachment-remove" aria-label="Remove attached reference"><i class="ph ph-x"></i></button></div><div><label class="agent-attach-button" for="agent-reference-file"><i class="ph ph-paperclip"></i>Reference<input id="agent-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /></label><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
     </aside>
+    <div class="build-monitor" id="build-monitor" hidden role="status"><span class="build-monitor-pulse"></span><div><b id="build-monitor-title">BUILD IN PROGRESS</b><small id="build-monitor-detail">External LLM request is running</small></div><time id="build-monitor-elapsed">00:00</time><button class="quiet-button" id="reopen-build" type="button">Open agent</button></div>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
   </div>`;
 
@@ -130,6 +133,60 @@ function renderAgentActivity() {
   if (!state.actionLog.length) { root.innerHTML = `<div class="activity-empty">No actions yet.</div>`; return; }
   const labels = { queued: "QUEUED", running: "RUNNING", done: "DONE", failed: "FAILED", info: "INFO" };
   root.innerHTML = state.actionLog.slice(-10).reverse().map((action) => `<div class="activity-row"><span class="activity-dot ${action.status}"></span><div><b>${escapeHtml(action.label)}</b><small>${escapeHtml(action.detail || labels[action.status] || action.status)}</small></div><time>${new Date(action.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></div>`).join("");
+}
+
+let buildTicker = null;
+
+function formatElapsed(milliseconds) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function renderBuildStatus() {
+  const running = state.build.status === "running";
+  const elapsed = running ? formatElapsed(Date.now() - state.build.startedAt) : "00:00";
+  const agent = state.agents.find((item) => item.agent_id === state.build.agent);
+  const label = agent?.label || state.build.agent || "LLM agent";
+  const detail = running ? `${label} is authoring build files · Blender and QA follow automatically` : "";
+  const panel = document.querySelector("#agent-build-state");
+  const panelDetail = document.querySelector("#build-state-detail");
+  const panelElapsed = document.querySelector("#build-state-elapsed");
+  const monitor = document.querySelector("#build-monitor");
+  const monitorDetail = document.querySelector("#build-monitor-detail");
+  const monitorElapsed = document.querySelector("#build-monitor-elapsed");
+  const monitorTitle = document.querySelector("#build-monitor-title");
+  if (panel) panel.hidden = !running;
+  if (panelDetail) panelDetail.textContent = detail;
+  if (panelElapsed) panelElapsed.textContent = elapsed;
+  if (monitor) monitor.hidden = !running || state.agentOpen;
+  if (monitorDetail) monitorDetail.textContent = running ? `${label} · request locked` : "";
+  if (monitorElapsed) monitorElapsed.textContent = elapsed;
+  if (monitorTitle) monitorTitle.textContent = `${label.toUpperCase()} BUILD RUNNING`;
+  document.querySelector("#agent-drawer")?.setAttribute("aria-busy", String(running));
+  const runButton = document.querySelector("#agent-form button[type=submit]");
+  if (runButton) {
+    if (!runButton.dataset.idleText) runButton.dataset.idleText = runButton.innerHTML;
+    runButton.disabled = running;
+    runButton.innerHTML = running ? `<i class="build-spinner"></i>Build running` : runButton.dataset.idleText;
+  }
+  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale"].forEach((selector) => {
+    const control = document.querySelector(selector);
+    if (control) control.disabled = running;
+  });
+}
+
+function startBuildStatus(agent) {
+  state.build = { status: "running", agent, startedAt: Date.now() };
+  clearInterval(buildTicker);
+  buildTicker = setInterval(renderBuildStatus, 1000);
+  renderBuildStatus();
+}
+
+function stopBuildStatus() {
+  clearInterval(buildTicker);
+  buildTicker = null;
+  state.build = { status: "idle", agent: "", startedAt: 0 };
+  renderBuildStatus();
 }
 
 function renderAgentProviderStatus() {
@@ -343,6 +400,7 @@ function openAgent() {
   renderAgentProviderStatus();
   renderAgentActivity();
   renderAgentThread();
+  renderBuildStatus();
   document.querySelector("#agent-input").focus();
 }
 
@@ -351,20 +409,30 @@ function closeAgent() {
   document.querySelector("#agent-drawer").classList.remove("is-open");
   document.querySelector("#agent-drawer").setAttribute("aria-hidden", "true");
   document.querySelector("#agent-backdrop").classList.remove("is-open");
+  renderBuildStatus();
 }
 
 async function executeAgentBuild(text) {
+  if (state.build.status === "running") {
+    toast("A build is already running. Open the build monitor to follow it.");
+    openAgent();
+    return;
+  }
+  const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
+  const label = provider?.label || state.agentProvider;
+  if (provider?.status !== "ACTIVE") {
+    addAgentMessage("user", text);
+    const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
+    updateAction(actionId, "failed", provider?.reason || "AUTH_REQUIRED");
+    addAgentMessage("agent", `${label} is not active (${provider?.reason || "AUTH_REQUIRED"}). Authenticate the external LLM first; Open3D will not use a local fallback.`);
+    return;
+  }
   const attachment = state.referenceImage;
   state.referenceImage = null;
   renderReferenceImage();
   addAgentMessage("user", attachment ? `${text}\n\nReference image attached: ${attachment.name}` : text);
-  const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
-  const label = provider?.label || state.agentProvider;
+  startBuildStatus(state.agentProvider);
   const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
-  if (provider?.status !== "ACTIVE") {
-    updateAction(actionId, "failed", provider?.reason || "AUTH_REQUIRED");
-    return addAgentMessage("agent", `${label} is not active (${provider?.reason || "AUTH_REQUIRED"}). Authenticate the external LLM first; Open3D will not use a local fallback.`);
-  }
   addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
   updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
   try {
@@ -385,6 +453,8 @@ async function executeAgentBuild(text) {
   } catch (error) {
     updateAction(actionId, "failed", error.message);
     addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
+  } finally {
+    stopBuildStatus();
   }
 }
 
@@ -677,12 +747,14 @@ function frameAsset() {
 function toggleGrid() { const grid = viewer.scene?.getObjectByName("open3d-grid"); if (grid) grid.visible = !grid.visible; }
 
 async function runQa(source = "workspace") {
+  if (state.build.status === "running") { toast("Build in progress. QA will run after the GLB is adopted."); return; }
   const actionId = beginAction(source === "agent" ? "Agent QA" : "Run QA", "Validating current GLB and contract");
   updateAction(actionId, "running", "Reading current artifact");
   try { state.report = await api("/api/validate"); setQaBadge(state.report.status); hydrateHeader(); if (state.activeView === "qa") renderView(); updateAction(actionId, state.report.status === "PASS" ? "done" : "failed", `QA ${state.report.status}`); toast("QA report refreshed", "success"); } catch (error) { updateAction(actionId, "failed", error.message); toast(error.message, "error"); }
 }
 
 async function applyScale() {
+  if (state.build.status === "running") { toast("Build in progress. Wait for the current artifact to finish."); return; }
   const partId = state.selectedPart; if (!partId) return;
   const values = Object.fromEntries(["x", "y", "z"].map((axis) => [axis, Number(document.querySelector(`#scale-${axis}`).value)]));
   try { state.busy = true; await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: partId, scale_x: values.x, scale_y: values.y, scale_z: values.z }) }); toast(`Scaled ${partId}`, "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); } finally { state.busy = false; }
@@ -711,6 +783,7 @@ document.querySelector("#create-close").addEventListener("click", closeCreateAss
 document.querySelector("#create-cancel").addEventListener("click", closeCreateAsset);
 document.querySelector("[data-close-create]").addEventListener("click", closeCreateAsset);
 document.querySelector("#open-agent").addEventListener("click", openAgent);
+document.querySelector("#reopen-build").addEventListener("click", openAgent);
 document.querySelector("#close-agent").addEventListener("click", closeAgent);
 document.querySelector("#agent-backdrop").addEventListener("click", closeAgent);
 document.querySelector("#agent-form").addEventListener("submit", submitAgentMessage);
