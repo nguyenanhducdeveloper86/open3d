@@ -169,7 +169,7 @@ function renderBuildStatus() {
     runButton.disabled = running;
     runButton.innerHTML = running ? `<i class="build-spinner"></i>Build running` : runButton.dataset.idleText;
   }
-  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale"].forEach((selector) => {
+  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected"].forEach((selector) => {
     const control = document.querySelector(selector);
     if (control) control.disabled = running;
   });
@@ -365,6 +365,21 @@ function selectedContractPart(partId = state.selectedPart) {
   return state.inspect?.contract.parts.find((part) => part.part_id.toLowerCase() === String(partId || "").toLowerCase());
 }
 
+function selectedAgentTarget() {
+  const part = selectedContractPart();
+  return part ? { partId: part.part_id, role: part.role || "semantic part" } : null;
+}
+
+function renderAgentTarget() {
+  const target = selectedAgentTarget();
+  const context = document.querySelector("#agent-context");
+  const note = document.querySelector("#agent-composer-note");
+  const input = document.querySelector("#agent-input");
+  if (context) context.textContent = target ? `Target: ${target.partId} · ${target.role}` : "Select a part to give the agent a target.";
+  if (note) note.textContent = target ? `Target ${target.partId} · LLM → Blender → QA` : "Whole asset · LLM → Blender → QA";
+  if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${target.partId}` : "Try: build a production-quality Scandinavian timber house";
+}
+
 function addAgentMessage(role, text, patch = null) {
   state.agentMessages.push({ role, text, patch });
   renderAgentThread();
@@ -386,9 +401,7 @@ function renderAgentThread() {
     else rejectAgentPatch(index);
   }));
   thread.scrollTop = thread.scrollHeight;
-  const selected = selectedContractPart();
-  const context = document.querySelector("#agent-context");
-  if (context) context.textContent = selected ? `Target: ${selected.part_id} · ${selected.role || "semantic part"}` : "Select a part to give the agent a target.";
+  renderAgentTarget();
 }
 
 function openAgent() {
@@ -420,8 +433,13 @@ async function executeAgentBuild(text) {
   }
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
+  const target = selectedAgentTarget();
+  const requestPrompt = target
+    ? [`Target semantic part: ${target.partId}`, `Target role: ${target.role}`, "Edit scope: modify this part only; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].join("\n")
+    : text;
+  const messageText = target ? `Target: ${target.partId} · ${target.role}\n\n${text}` : text;
   if (provider?.status !== "ACTIVE") {
-    addAgentMessage("user", text);
+    addAgentMessage("user", messageText);
     const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
     updateAction(actionId, "failed", provider?.reason || "AUTH_REQUIRED");
     addAgentMessage("agent", `${label} is not active (${provider?.reason || "AUTH_REQUIRED"}). Authenticate the external LLM first; Open3D will not use a local fallback.`);
@@ -430,13 +448,13 @@ async function executeAgentBuild(text) {
   const attachment = state.referenceImage;
   state.referenceImage = null;
   renderReferenceImage();
-  addAgentMessage("user", attachment ? `${text}\n\nReference image attached: ${attachment.name}` : text);
+  addAgentMessage("user", attachment ? `${messageText}\n\nReference image attached: ${attachment.name}` : messageText);
   startBuildStatus(state.agentProvider);
   const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
   addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
   updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
   try {
-    const request = { agent: state.agentProvider, prompt: text, timeout: 900 };
+    const request = { agent: state.agentProvider, prompt: requestPrompt, timeout: 900 };
     if (attachment) request.reference_image = attachment;
     const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify(request) });
     const output = (result.cli?.stdout || result.cli?.stderr || result.error || result.reason || "No build output").slice(0, 6000);
@@ -592,11 +610,15 @@ function renderWorkspace() {
   const contract = state.inspect.contract;
   const query = state.query.toLowerCase();
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
-  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="frame-tool" title="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Drag to orbit</span><span>Scroll to zoom</span></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
+  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame asset" aria-label="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Wheel zoom</span><span>Shift-drag pan</span></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
   document.querySelector("#part-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => selectPart(button.dataset.part)));
+  document.querySelector("#comment-selected")?.addEventListener("click", openAgent);
   document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; renderView(); highlightPart(null); });
+  document.querySelector("#focus-part-tool").addEventListener("click", frameSelectedPart);
   document.querySelector("#frame-tool").addEventListener("click", frameAsset);
+  document.querySelector("#zoom-out-tool").addEventListener("click", () => zoomViewer(1.2));
+  document.querySelector("#zoom-in-tool").addEventListener("click", () => zoomViewer(0.82));
   document.querySelector("#grid-tool").addEventListener("click", toggleGrid);
   mountViewer();
 }
@@ -609,7 +631,7 @@ function partRow(part) {
 function selectedPartMarkup() {
   const part = state.inspect.contract.parts.find((item) => item.part_id === state.selectedPart);
   if (!part) return `<div class="empty-selection"><i class="ph ph-cursor-click"></i><p>Select a semantic part in the list or the viewport.</p></div>`;
-  return `<div class="selected-part"><div class="selected-title"><span class="large-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><div><h2>${escapeHtml(part.part_id)}</h2><span>${escapeHtml(part.role || "semantic part")}</span></div><span class="selection-check"><i class="ph ph-check"></i></span></div><div class="field-label">SCALE FACTOR</div><div class="scale-fields"><label>X<input id="scale-x" type="number" min="0.01" step="0.05" value="1" /></label><label>Y<input id="scale-y" type="number" min="0.01" step="0.05" value="1" /></label><label>Z<input id="scale-z" type="number" min="0.01" step="0.05" value="1" /></label></div><button class="primary-action" id="apply-scale"><i class="ph ph-arrows-out"></i>Apply scale edit</button></div>`;
+  return `<div class="selected-part"><div class="selected-title"><span class="large-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><div><h2>${escapeHtml(part.part_id)}</h2><span>${escapeHtml(part.role || "semantic part")}</span></div><span class="selection-check"><i class="ph ph-check"></i></span></div><div class="field-label">SCALE FACTOR</div><div class="scale-fields"><label>X<input id="scale-x" type="number" min="0.01" step="0.05" value="1" /></label><label>Y<input id="scale-y" type="number" min="0.01" step="0.05" value="1" /></label><label>Z<input id="scale-z" type="number" min="0.01" step="0.05" value="1" /></label></div><button class="primary-action" id="apply-scale"><i class="ph ph-arrows-out"></i>Apply scale edit</button><button class="quiet-button part-comment-button" id="comment-selected" type="button"><i class="ph ph-chat-circle-text"></i>Comment with agent</button></div>`;
 }
 
 function renderQa() {
@@ -633,7 +655,7 @@ function renderProviders() {
 
 function hash(value) { return [...value].reduce((total, character) => ((total << 5) - total + character.charCodeAt(0)) | 0, 0); }
 
-function selectPart(partId) { state.selectedPart = partId; renderView(); loadArtifact(); }
+function selectPart(partId) { state.selectedPart = partId; renderView(); renderAgentThread(); loadArtifact(); }
 
 function disposeViewer() {
   if (viewer.resize) viewer.resize.disconnect();
@@ -742,6 +764,27 @@ function frameAsset() {
   const bounds = new THREE.Box3().setFromObject(viewer.root); const sphere = bounds.getBoundingSphere(new THREE.Sphere());
   const distance = Math.max(sphere.radius * 2.8, 1); const direction = new THREE.Vector3(1, 0.72, 1).normalize();
   viewer.camera.position.copy(sphere.center).add(direction.multiplyScalar(distance)); viewer.controls.target.copy(sphere.center); viewer.controls.update();
+}
+
+function frameSelectedPart() {
+  if (!viewer.root || !state.selectedPart) return frameAsset();
+  const bounds = new THREE.Box3();
+  viewer.root.traverse((node) => { if (node.isMesh && node.userData.partId === state.selectedPart) bounds.expandByObject(node); });
+  if (bounds.isEmpty()) return frameAsset();
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const distance = Math.max(sphere.radius * 3.2, 0.35);
+  const direction = new THREE.Vector3(1, 0.72, 1).normalize();
+  viewer.camera.position.copy(sphere.center).add(direction.multiplyScalar(distance));
+  viewer.controls.target.copy(sphere.center);
+  viewer.controls.update();
+}
+
+function zoomViewer(factor) {
+  if (!viewer.camera || !viewer.controls) return;
+  const offset = viewer.camera.position.clone().sub(viewer.controls.target).multiplyScalar(factor);
+  const distance = THREE.MathUtils.clamp(offset.length(), viewer.controls.minDistance, viewer.controls.maxDistance);
+  viewer.camera.position.copy(viewer.controls.target).add(offset.normalize().multiplyScalar(distance));
+  viewer.controls.update();
 }
 
 function toggleGrid() { const grid = viewer.scene?.getObjectByName("open3d-grid"); if (grid) grid.visible = !grid.visible; }
