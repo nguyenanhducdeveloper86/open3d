@@ -370,7 +370,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     runner: Callable[..., Any] = subprocess.run,
                     which: Callable[[str], str | None] = shutil.which,
                     worker: Any | None = None,
-                    reference_image: dict[str, Any] | None = None) -> dict[str, Any]:
+                    reference_image: dict[str, Any] | None = None,
+                    target_asset_id: str | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -405,8 +406,14 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     staged_reference = _stage_reference_image(reference_image, workspace)
     project_obj = Project(project_path)
     current_ref = project_obj.current()
-    (workspace / "current_asset.json").write_text(json.dumps(project_obj.load_current_asset(), ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    previous_workspace = current_ref.get("agent_build", {}).get("workspace") if isinstance(current_ref.get("agent_build"), dict) else None
+    target_ref = current_ref
+    target_asset = project_obj.load_current_asset()
+    if target_asset_id and target_asset_id != current_ref.get("asset_id"):
+        catalog_asset = project_obj.workspace_asset(target_asset_id)
+        target_ref = {**current_ref, **{key: catalog_asset[key] for key in ("asset_id", "contract_artifact", "glb_artifact", "qa_artifact", "qa_status", "geometry_source", "agent_build") if key in catalog_asset}}
+        target_asset = project_obj.store.read_json(catalog_asset["contract_artifact"])
+    (workspace / "current_asset.json").write_text(json.dumps(target_asset, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    previous_workspace = target_ref.get("agent_build", {}).get("workspace") if isinstance(target_ref.get("agent_build"), dict) else None
     if isinstance(previous_workspace, str):
         previous_path = (project_path / previous_workspace).resolve()
         try:
@@ -418,7 +425,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                 source = previous_path / source_name
                 if source.is_file() and not source.is_symlink():
                     shutil.copy2(source, workspace / target_name)
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": target_asset_id or current_ref.get("asset_id")}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None)
     completed = None
     try:

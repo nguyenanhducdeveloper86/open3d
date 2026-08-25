@@ -80,6 +80,8 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(HTTPStatus.OK, self.server.project.validate())
                 if path == "/api/history":
                     return self._send(HTTPStatus.OK, self.server.project.history())
+                if path == "/api/workspace":
+                    return self._send(HTTPStatus.OK, self.server.project.workspace())
                 if path == "/api/providers":
                     return self._send(HTTPStatus.OK, provider_catalog())
                 if path == "/api/agents":
@@ -88,6 +90,13 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(HTTPStatus.OK, agent_pool_status())
                 if path == "/api/artifact/current":
                     data = self.server.project.store.read_bytes(self.server.project.current()["glb_artifact"])
+                    return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
+                path_parts = path.split("/")
+                if len(path_parts) == 4 and path_parts[1:3] == ["api", "assets"]:
+                    return self._send(HTTPStatus.OK, self.server.project.workspace_asset(path_parts[3]))
+                if len(path_parts) == 5 and path_parts[1] == "api" and path_parts[2] == "assets" and path_parts[4] == "artifact":
+                    asset = self.server.project.workspace_asset(path_parts[3])
+                    data = self.server.project.store.read_bytes(asset["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
                 if path == "/api/production/state":
                     return self._send(HTTPStatus.OK, production_state(self.server.project))
@@ -138,7 +147,17 @@ class _Handler(BaseHTTPRequestHandler):
                 elif path == "/api/agent/plan":
                     value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
                 elif path == "/api/agent/build":
-                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"))
+                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"))
+                    if value.get("status") == "PASS" and (isinstance(body.get("spawn"), dict) or body.get("create_asset") is True):
+                        current = value.get("mutation", {}).get("current", {})
+                        value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))
+                elif path == "/api/scene/instances":
+                    value = self.server.project.add_scene_instance(body["asset_id"], body.get("transform"), instance_id=body.get("instance_id"))
+                elif path.startswith("/api/scene/instances/") and path.endswith("/update"):
+                    instance_id = path.split("/")[4]
+                    value = self.server.project.update_scene_instance(instance_id, body.get("transform", body))
+                elif path == "/api/scene/instances/remove":
+                    value = self.server.project.remove_scene_instance(body["instance_id"])
                 else:
                     return self._error(HTTPStatus.NOT_FOUND, "route not found")
             self._send(HTTPStatus.OK, value)

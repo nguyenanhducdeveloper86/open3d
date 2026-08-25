@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import tempfile
@@ -20,6 +21,10 @@ class ProjectError(ValueError):
     pass
 
 
+_WORKSPACE_SCHEMA = "0.1.0"
+_INSTANCE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+
+
 class Project:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
@@ -30,6 +35,7 @@ class Project:
         self.refs = self.state / "refs"
         self.checkpoints = self.refs / "checkpoints"
         self.operations = self.state / "operations" / "operations.jsonl"
+        self.workspace_path = self.state / "workspace.json"
 
     @staticmethod
     def _write_atomic(path: Path, data: bytes) -> None:
@@ -65,6 +71,7 @@ class Project:
         project.refs = state / "refs"
         project.checkpoints = project.refs / "checkpoints"
         project.operations = state / "operations" / "operations.jsonl"
+        project.workspace_path = state / "workspace.json"
         project.refs.mkdir(parents=True, exist_ok=True)
         project.checkpoints.mkdir(parents=True, exist_ok=True)
         project.operations.parent.mkdir(parents=True, exist_ok=True)
@@ -86,6 +93,7 @@ class Project:
         project._write_atomic(project.refs / "current.json", canonical_json(current))
         project._write_atomic(project.root / "project.json", canonical_json({"schema_version": "0.1.0", "project_id": current["project_id"], "asset_id": asset["asset_id"], "current_ref": ".open3d/refs/current.json"}))
         project._create_checkpoint(current, parent=None, operation_id="op_init", note="initial project state")
+        project._write_workspace(project._new_workspace(project.current(), asset))
         return project
 
     def _current_path(self) -> Path:
@@ -110,6 +118,164 @@ class Project:
                 "current_ref": ".open3d/refs/current.json",
             }),
         )
+
+    @staticmethod
+    def _identity_transform() -> dict[str, dict[str, float]]:
+        return {
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
+        }
+
+    @staticmethod
+    def _transform(value: Any) -> dict[str, dict[str, float]]:
+        if value is None:
+            return Project._identity_transform()
+        if not isinstance(value, dict):
+            raise ProjectError("scene transform must be an object")
+        result = Project._identity_transform()
+        for name in result:
+            source = value.get(name, {})
+            if not isinstance(source, dict):
+                raise ProjectError(f"scene transform.{name} must be an object")
+            for axis in result[name]:
+                number = source.get(axis, result[name][axis])
+                if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
+                    raise ProjectError(f"scene transform.{name}.{axis} must be finite")
+                if name == "scale" and number <= 0:
+                    raise ProjectError(f"scene transform.scale.{axis} must be positive")
+                result[name][axis] = float(number)
+        return result
+
+    def _workspace_entry(self, ref: dict[str, Any], asset: dict[str, Any] | None = None) -> dict[str, Any]:
+        asset = normalize_asset(asset if asset is not None else self.store.read_json(ref["contract_artifact"]))
+        return {
+            "asset_id": asset["asset_id"],
+            "name": asset.get("name") or asset["asset_id"],
+            "kind": asset["kind"],
+            "units": asset["units"],
+            "dimensions": asset["dimensions"],
+            "parts": asset["parts"],
+            "contract": asset,
+            "contract_artifact": ref["contract_artifact"],
+            "glb_artifact": ref["glb_artifact"],
+            "qa_artifact": ref.get("qa_artifact"),
+            "qa_status": ref.get("qa_status", "UNKNOWN"),
+            "geometry_source": ref.get("geometry_source", "contract"),
+            "agent_build": ref.get("agent_build"),
+        }
+
+    def _new_workspace(self, ref: dict[str, Any], asset: dict[str, Any] | None = None) -> dict[str, Any]:
+        entry = self._workspace_entry(ref, asset)
+        instance_id = f"instance-{uuid.uuid4().hex[:12]}"
+        return {
+            "schema_version": _WORKSPACE_SCHEMA,
+            "project_id": ref["project_id"],
+            "assets": [entry],
+            "scene": {
+                "schema_version": _WORKSPACE_SCHEMA,
+                "instances": [{"instance_id": instance_id, "asset_id": entry["asset_id"], **self._identity_transform()}],
+            },
+        }
+
+    def _read_workspace(self) -> tuple[dict[str, Any], bool]:
+        if not self.workspace_path.is_file():
+            return self._new_workspace(self.current()), True
+        try:
+            value = json.loads(self.workspace_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ProjectError("workspace state is missing or corrupt") from exc
+        if not isinstance(value, dict) or not isinstance(value.get("assets"), list):
+            raise ProjectError("workspace state must contain an assets list")
+        scene = value.get("scene")
+        if not isinstance(scene, dict) or not isinstance(scene.get("instances"), list):
+            raise ProjectError("workspace state must contain scene instances")
+        return value, False
+
+    def _write_workspace(self, value: dict[str, Any]) -> None:
+        self._write_atomic(self.workspace_path, canonical_json(value))
+
+    def _upsert_workspace_asset(self, ref: dict[str, Any], asset: dict[str, Any] | None = None) -> dict[str, Any]:
+        value, _ = self._read_workspace()
+        entry = self._workspace_entry(ref, asset)
+        assets = value.setdefault("assets", [])
+        for index, existing in enumerate(assets):
+            if existing.get("asset_id") == entry["asset_id"]:
+                assets[index] = entry
+                break
+        else:
+            assets.append(entry)
+        value["schema_version"] = _WORKSPACE_SCHEMA
+        value["project_id"] = ref["project_id"]
+        value.setdefault("scene", {"schema_version": _WORKSPACE_SCHEMA, "instances": []})["schema_version"] = _WORKSPACE_SCHEMA
+        self._write_workspace(value)
+        return entry
+
+    def workspace(self) -> dict[str, Any]:
+        value, missing = self._read_workspace()
+        current = self.current()
+        current_entry = self._workspace_entry(current)
+        assets = value.setdefault("assets", [])
+        changed = missing
+        for index, existing in enumerate(assets):
+            if existing.get("asset_id") == current_entry["asset_id"]:
+                if existing.get("glb_artifact") != current_entry["glb_artifact"] or existing.get("qa_artifact") != current_entry.get("qa_artifact"):
+                    assets[index] = current_entry
+                    changed = True
+                break
+        else:
+            assets.append(current_entry)
+            changed = True
+        value.setdefault("scene", {"schema_version": _WORKSPACE_SCHEMA, "instances": []})
+        value["scene"].setdefault("instances", [])
+        if not value["scene"]["instances"]:
+            value["scene"]["instances"].append({"instance_id": f"instance-{uuid.uuid4().hex[:12]}", "asset_id": current_entry["asset_id"], **self._identity_transform()})
+            changed = True
+        if changed:
+            value["schema_version"] = _WORKSPACE_SCHEMA
+            value["project_id"] = current["project_id"]
+            value["scene"]["schema_version"] = _WORKSPACE_SCHEMA
+            self._write_workspace(value)
+        return value
+
+    def workspace_asset(self, asset_id: str) -> dict[str, Any]:
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise ProjectError("asset_id must be a non-empty string")
+        for asset in self.workspace()["assets"]:
+            if asset.get("asset_id") == asset_id:
+                return asset
+        raise ProjectError(f"workspace asset not found: {asset_id}")
+
+    def add_scene_instance(self, asset_id: str, transform: dict[str, Any] | None = None, *, instance_id: str | None = None) -> dict[str, Any]:
+        asset = self.workspace_asset(asset_id)
+        value = self.workspace()
+        instance_id = instance_id or f"instance-{uuid.uuid4().hex[:12]}"
+        if not isinstance(instance_id, str) or not _INSTANCE_ID.fullmatch(instance_id):
+            raise ProjectError("instance_id must match ^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+        if any(item.get("instance_id") == instance_id for item in value["scene"]["instances"]):
+            raise ProjectError(f"scene instance already exists: {instance_id}")
+        instance = {"instance_id": instance_id, "asset_id": asset["asset_id"], **self._transform(transform)}
+        value["scene"]["instances"].append(instance)
+        self._write_workspace(value)
+        return instance
+
+    def update_scene_instance(self, instance_id: str, transform: dict[str, Any]) -> dict[str, Any]:
+        value = self.workspace()
+        for instance in value["scene"]["instances"]:
+            if instance.get("instance_id") == instance_id:
+                instance.update(self._transform(transform))
+                self._write_workspace(value)
+                return instance
+        raise ProjectError(f"scene instance not found: {instance_id}")
+
+    def remove_scene_instance(self, instance_id: str) -> dict[str, Any]:
+        value = self.workspace()
+        before = len(value["scene"]["instances"])
+        value["scene"]["instances"] = [item for item in value["scene"]["instances"] if item.get("instance_id") != instance_id]
+        if len(value["scene"]["instances"]) == before:
+            raise ProjectError(f"scene instance not found: {instance_id}")
+        self._write_workspace(value)
+        return {"instance_id": instance_id, "removed": True}
 
     def _append_operation(self, operation: dict[str, Any]) -> None:
         self.operations.parent.mkdir(parents=True, exist_ok=True)
@@ -154,6 +320,7 @@ class Project:
         restored["checkpoint_id"] = checkpoint_id
         self._write_current(restored)
         self._write_project_metadata(restored)
+        self._upsert_workspace_asset(restored)
         self._append_operation({"schema_version": "0.1.0", "operation_id": _operation_id(), "name": "checkpoint.rollback", "version": "0.1", "input_checkpoint": previous.get("checkpoint_id"), "result_checkpoint": checkpoint_id, "mutates": [], "invalidates": []})
         return restored
 
@@ -179,6 +346,7 @@ class Project:
         current["qa_artifact"] = qa_id
         current["qa_status"] = report["status"]
         self._write_current(current)
+        self._upsert_workspace_asset(current, asset)
         return report
 
     def edit_part(self, part_id: str, scales: dict[str, float], *, idempotency_key: str | None = None) -> dict[str, Any]:
@@ -226,6 +394,7 @@ class Project:
         result_checkpoint = self._create_checkpoint(next_ref, parent=before_checkpoint, operation_id=operation_id, note=f"after edit {part_id}")
         operation["result_checkpoint"] = result_checkpoint
         self._append_operation(operation)
+        self._upsert_workspace_asset(self.current(), candidate)
         return {"operation": operation, "report": report, "current": self.current()}
 
     def replace_generated_asset(self, asset: dict[str, Any], glb: bytes, *, blend: bytes | None = None,
@@ -288,6 +457,8 @@ class Project:
         self._append_operation(operation)
         self._write_atomic(self.root / "asset.yaml", asset_bytes(candidate))
         self._write_project_metadata(self.current())
+        self._upsert_workspace_asset(current)
+        self._upsert_workspace_asset(self.current(), candidate)
         result = {"status": "PASS", "mutated": True, "operation": operation, "report": report, "current": self.current()}
         if fitted_dimensions:
             result["dimensions_autofit"] = fitted_dimensions
