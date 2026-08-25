@@ -36,6 +36,8 @@ const state = {
   agentOpen: false,
   assetDraft: readDraft(),
   referenceImage: null,
+  annotationMode: false,
+  annotation: null,
   build: { status: "idle", agent: "", startedAt: 0 },
   agentMessages: [{ role: "agent", text: "Choose an active LLM agent. Every prompt is executed by Codex, Claude Code, or OpenCode, then Open3D runs Blender and QA. There is no local agent fallback." }],
 };
@@ -169,7 +171,7 @@ function renderBuildStatus() {
     runButton.disabled = running;
     runButton.innerHTML = running ? `<i class="build-spinner"></i>Build running` : runButton.dataset.idleText;
   }
-  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected"].forEach((selector) => {
+  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected", "#annotate-tool"].forEach((selector) => {
     const control = document.querySelector(selector);
     if (control) control.disabled = running;
   });
@@ -366,18 +368,19 @@ function selectedContractPart(partId = state.selectedPart) {
 }
 
 function selectedAgentTarget() {
-  const part = selectedContractPart();
+  const part = state.annotation?.partId ? selectedContractPart(state.annotation.partId) : selectedContractPart();
   return part ? { partId: part.part_id, role: part.role || "semantic part" } : null;
 }
 
 function renderAgentTarget() {
   const target = selectedAgentTarget();
+  const marked = state.annotation ? " · marked area" : "";
   const context = document.querySelector("#agent-context");
   const note = document.querySelector("#agent-composer-note");
   const input = document.querySelector("#agent-input");
-  if (context) context.textContent = target ? `Target: ${target.partId} · ${target.role}` : "Select a part to give the agent a target.";
-  if (note) note.textContent = target ? `Target ${target.partId} · LLM → Blender → QA` : "Whole asset · LLM → Blender → QA";
-  if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${target.partId}` : "Try: build a production-quality Scandinavian timber house";
+  if (context) context.textContent = target ? `Target: ${target.partId} · ${target.role}${marked}` : state.annotation ? "Target: marked viewport area" : "Select a part or mark an area to give the agent a target.";
+  if (note) note.textContent = target ? `Target ${target.partId}${marked} · LLM → Blender → QA` : state.annotation ? "Marked area · LLM → Blender → QA" : "Whole asset · LLM → Blender → QA";
+  if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${target.partId}` : state.annotation ? "Describe what is wrong in the marked area" : "Try: build a production-quality Scandinavian timber house";
 }
 
 function addAgentMessage(role, text, patch = null) {
@@ -434,10 +437,12 @@ async function executeAgentBuild(text) {
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
   const target = selectedAgentTarget();
+  const markedContext = state.annotation ? `Marked viewport area: x=${state.annotation.x.toFixed(3)}, y=${state.annotation.y.toFixed(3)}, width=${state.annotation.width.toFixed(3)}, height=${state.annotation.height.toFixed(3)} in normalized viewport coordinates. A cropped viewport reference is attached.` : "";
   const requestPrompt = target
-    ? [`Target semantic part: ${target.partId}`, `Target role: ${target.role}`, "Edit scope: modify this part only; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].join("\n")
-    : text;
-  const messageText = target ? `Target: ${target.partId} · ${target.role}\n\n${text}` : text;
+    ? [`Target semantic part: ${target.partId}`, `Target role: ${target.role}`, markedContext, "Edit scope: modify this part only; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].filter(Boolean).join("\n")
+    : [markedContext, text].filter(Boolean).join("\n");
+  const messageTarget = target ? `Target: ${target.partId} · ${target.role}` : state.annotation ? "Target: marked viewport area" : "";
+  const messageText = messageTarget ? `${messageTarget}\n\n${text}` : text;
   if (provider?.status !== "ACTIVE") {
     addAgentMessage("user", messageText);
     const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
@@ -610,17 +615,22 @@ function renderWorkspace() {
   const contract = state.inspect.contract;
   const query = state.query.toLowerCase();
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
-  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame asset" aria-label="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Wheel zoom</span><span>Shift-drag pan</span></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
+  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="annotate-tool" title="Mark an area to comment with the agent"><i class="ph ph-pencil-simple"></i><span>Mark area</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame asset" aria-label="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Wheel zoom</span><span>Shift-drag pan</span></div><div class="viewport-annotation-layer" id="annotation-layer" aria-hidden="true"><div class="annotation-box" id="annotation-box" hidden><span>MARKED AREA</span></div><div class="annotation-actions" id="annotation-actions" hidden><span id="annotation-label">Area marked</span><button class="quiet-button" id="annotation-comment" type="button"><i class="ph ph-chat-circle-text"></i>Comment</button><button class="icon-button" id="annotation-clear" type="button" aria-label="Clear marked area"><i class="ph ph-x"></i></button></div></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
   document.querySelector("#part-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => selectPart(button.dataset.part)));
   document.querySelector("#comment-selected")?.addEventListener("click", openAgent);
-  document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; renderView(); highlightPart(null); });
+  document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; clearAnnotation(); renderView(); renderAgentThread(); highlightPart(null); });
   document.querySelector("#focus-part-tool").addEventListener("click", frameSelectedPart);
   document.querySelector("#frame-tool").addEventListener("click", frameAsset);
   document.querySelector("#zoom-out-tool").addEventListener("click", () => zoomViewer(1.2));
   document.querySelector("#zoom-in-tool").addEventListener("click", () => zoomViewer(0.82));
   document.querySelector("#grid-tool").addEventListener("click", toggleGrid);
+  document.querySelector("#annotate-tool").addEventListener("click", toggleAnnotationMode);
+  document.querySelector("#annotation-comment").addEventListener("click", openAgent);
+  document.querySelector("#annotation-clear").addEventListener("click", clearAnnotation);
   mountViewer();
+  bindAnnotationLayer();
+  renderAnnotationLayer();
 }
 
 function partRow(part) {
@@ -655,7 +665,13 @@ function renderProviders() {
 
 function hash(value) { return [...value].reduce((total, character) => ((total << 5) - total + character.charCodeAt(0)) | 0, 0); }
 
-function selectPart(partId) { state.selectedPart = partId; renderView(); renderAgentThread(); loadArtifact(); }
+function selectPart(partId, preserveAnnotation = false) {
+  state.selectedPart = partId;
+  if (!preserveAnnotation) { state.annotationMode = false; annotationDraft = null; state.annotation = null; }
+  renderView();
+  renderAgentThread();
+  loadArtifact();
+}
 
 function disposeViewer() {
   if (viewer.resize) viewer.resize.disconnect();
@@ -736,14 +752,19 @@ async function loadArtifact() {
 
 function countMeshes(root) { let count = 0; root.traverse((node) => { if (node.isMesh) count++; }); return count; }
 
-function pickPart(event) {
-  if (!viewer.root) return;
+function partAtClientPoint(event) {
+  if (!viewer.root || !viewer.canvas) return null;
   const rect = viewer.canvas.getBoundingClientRect();
   viewer.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   viewer.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   viewer.raycaster.setFromCamera(viewer.pointer, viewer.camera);
   const hit = viewer.raycaster.intersectObject(viewer.root, true)[0];
-  if (hit?.object?.userData?.partId) selectPart(hit.object.userData.partId);
+  return hit?.object?.userData?.partId || null;
+}
+
+function pickPart(event) {
+  const partId = partAtClientPoint(event);
+  if (partId) selectPart(partId);
 }
 
 function highlightPart(partId) {
@@ -785,6 +806,130 @@ function zoomViewer(factor) {
   const distance = THREE.MathUtils.clamp(offset.length(), viewer.controls.minDistance, viewer.controls.maxDistance);
   viewer.camera.position.copy(viewer.controls.target).add(offset.normalize().multiplyScalar(distance));
   viewer.controls.update();
+}
+
+let annotationDraft = null;
+
+function annotationPoint(event, layer) {
+  const rect = layer.getBoundingClientRect();
+  return { x: THREE.MathUtils.clamp(event.clientX - rect.left, 0, rect.width), y: THREE.MathUtils.clamp(event.clientY - rect.top, 0, rect.height) };
+}
+
+function renderAnnotationLayer() {
+  const layer = document.querySelector("#annotation-layer");
+  const box = document.querySelector("#annotation-box");
+  const actions = document.querySelector("#annotation-actions");
+  const label = document.querySelector("#annotation-label");
+  const tool = document.querySelector("#annotate-tool");
+  if (!layer || !box || !actions) return;
+  const viewport = document.querySelector("#viewport");
+  const width = viewport?.clientWidth || 1;
+  const height = viewport?.clientHeight || 1;
+  const rect = annotationDraft || (state.annotation ? { x: state.annotation.x * width, y: state.annotation.y * height, width: state.annotation.width * width, height: state.annotation.height * height } : null);
+  layer.classList.toggle("is-active", state.annotationMode);
+  viewport?.classList.toggle("is-annotating", state.annotationMode);
+  layer.setAttribute("aria-hidden", String(!state.annotationMode && !state.annotation));
+  tool?.classList.toggle("active", state.annotationMode);
+  if (!rect) { box.hidden = true; actions.hidden = true; return; }
+  box.hidden = false;
+  box.style.left = `${rect.x}px`;
+  box.style.top = `${rect.y}px`;
+  box.style.width = `${Math.max(rect.width, 1)}px`;
+  box.style.height = `${Math.max(rect.height, 1)}px`;
+  actions.hidden = !state.annotation;
+  actions.style.left = `${Math.min(Math.max(rect.x, 8), Math.max(width - 188, 8))}px`;
+  actions.style.top = `${Math.min(rect.y + rect.height + 8, Math.max(height - 42, 8))}px`;
+  if (label && state.annotation) label.textContent = state.annotation.partId ? `Marked ${state.annotation.partId}` : "Marked area";
+}
+
+function toggleAnnotationMode() {
+  if (state.build.status === "running") { toast("Build in progress. Wait before marking another area."); return; }
+  state.annotationMode = !state.annotationMode;
+  annotationDraft = null;
+  if (state.annotationMode) state.annotation = null;
+  renderAnnotationLayer();
+  renderAgentTarget();
+}
+
+function clearAnnotation() {
+  state.annotationMode = false;
+  annotationDraft = null;
+  state.annotation = null;
+  if (state.referenceImage?.name.startsWith("marked-area-")) removeReferenceImage();
+  renderAnnotationLayer();
+  renderAgentTarget();
+}
+
+function bindAnnotationLayer() {
+  const layer = document.querySelector("#annotation-layer");
+  if (!layer) return;
+  layer.addEventListener("pointerdown", (event) => {
+    if (!state.annotationMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = annotationPoint(event, layer);
+    annotationDraft = { startX: point.x, startY: point.y, x: point.x, y: point.y, width: 0, height: 0 };
+    layer.setPointerCapture(event.pointerId);
+    renderAnnotationLayer();
+  });
+  layer.addEventListener("pointermove", (event) => {
+    if (!annotationDraft) return;
+    const point = annotationPoint(event, layer);
+    annotationDraft.x = Math.min(annotationDraft.startX, point.x);
+    annotationDraft.y = Math.min(annotationDraft.startY, point.y);
+    annotationDraft.width = Math.abs(point.x - annotationDraft.startX);
+    annotationDraft.height = Math.abs(point.y - annotationDraft.startY);
+    renderAnnotationLayer();
+  });
+  layer.addEventListener("pointerup", async (event) => {
+    if (!annotationDraft) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const draft = { ...annotationDraft };
+    annotationDraft = null;
+    if (layer.hasPointerCapture(event.pointerId)) layer.releasePointerCapture(event.pointerId);
+    if (draft.width < 16 || draft.height < 16) { renderAnnotationLayer(); return; }
+    const rect = layer.getBoundingClientRect();
+    const center = { clientX: rect.left + draft.x + draft.width / 2, clientY: rect.top + draft.y + draft.height / 2 };
+    const partId = partAtClientPoint(center);
+    state.annotation = { x: draft.x / rect.width, y: draft.y / rect.height, width: draft.width / rect.width, height: draft.height / rect.height, partId };
+    state.annotationMode = false;
+    try { await captureAnnotationReference(state.annotation); } catch (error) { toast(error.message, "error"); }
+    if (partId) {
+      state.selectedPart = partId;
+      renderView();
+      renderAgentThread();
+      loadArtifact();
+    } else {
+      renderAnnotationLayer();
+      renderAgentTarget();
+    }
+  });
+}
+
+async function captureAnnotationReference(annotation) {
+  const source = viewer.canvas;
+  const viewport = document.querySelector("#viewport");
+  if (!source || !viewport) return;
+  const viewportRect = viewport.getBoundingClientRect();
+  const scaleX = source.width / Math.max(viewportRect.width, 1);
+  const scaleY = source.height / Math.max(viewportRect.height, 1);
+  const sourceX = Math.max(0, Math.floor(annotation.x * viewportRect.width * scaleX));
+  const sourceY = Math.max(0, Math.floor(annotation.y * viewportRect.height * scaleY));
+  const sourceWidth = Math.max(1, Math.min(source.width - sourceX, Math.floor(annotation.width * viewportRect.width * scaleX)));
+  const sourceHeight = Math.max(1, Math.min(source.height - sourceY, Math.floor(annotation.height * viewportRect.height * scaleY)));
+  const output = document.createElement("canvas");
+  const outputScale = Math.min(1, 1100 / Math.max(sourceWidth, sourceHeight));
+  output.width = Math.max(1, Math.round(sourceWidth * outputScale));
+  output.height = Math.max(1, Math.round(sourceHeight * outputScale));
+  output.getContext("2d").drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
+  const name = `marked-area-${annotation.partId || "asset"}.jpg`;
+  let image = { name, mime_type: "image/jpeg", data: output.toDataURL("image/jpeg", 0.72) };
+  if (image.data.length > MAX_REFERENCE_DATA_URL_LENGTH) image = await compressReferenceImage(image.data, name);
+  if (image.data.length > MAX_REFERENCE_DATA_URL_LENGTH) throw new Error("Marked area is too large after compression");
+  state.referenceImage = image;
+  renderReferenceImage();
+  toast("Marked area attached to the agent request", "success");
 }
 
 function toggleGrid() { const grid = viewer.scene?.getObjectByName("open3d-grid"); if (grid) grid.visible = !grid.visible; }
