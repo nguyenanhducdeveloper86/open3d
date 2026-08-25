@@ -6,6 +6,8 @@ import "./styles.css";
 
 const REQUIRED_VIEWS = ["HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"];
 const DEFAULT_HOUSE_PROMPT = "Production-quality stylized Scandinavian timber house prop, single-story modern cabin with a gabled roof, four walls, a door, two windows, and a chimney; clean bevels, separate semantic parts, realistic proportions, neutral studio materials, and six orthographic views.";
+const MAX_REFERENCE_IMAGE_BYTES = 600 * 1024;
+const MAX_REFERENCE_DATA_URL_LENGTH = 800000;
 
 function readDraft() {
   try { return JSON.parse(localStorage.getItem("open3d.asset-draft") || "null"); } catch { return null; }
@@ -33,6 +35,7 @@ const state = {
   createOpen: false,
   agentOpen: false,
   assetDraft: readDraft(),
+  referenceImage: null,
   agentMessages: [{ role: "agent", text: "Choose an active LLM agent. Every prompt is executed by Codex, Claude Code, or OpenCode, then Open3D runs Blender and QA. There is no local agent fallback." }],
 };
 
@@ -65,12 +68,14 @@ app.innerHTML = `
       <div class="modal-backdrop" data-close-create></div>
       <form class="create-modal" id="create-form" aria-labelledby="create-title">
         <header class="modal-header"><div><div class="eyebrow">CREATE ASSET</div><h2 id="create-title">Start from a production brief</h2><p>Save the prompt and reference boundary before a recipe or provider runs.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
-        <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local file or reference path" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
+        <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH / NOTE</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local path or note" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
         <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="6">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea></label>
+        <div class="reference-upload"><label class="reference-drop" for="create-reference-file"><input id="create-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /><i class="ph ph-image-square"></i><span id="reference-file-label">Attach reference image</span><small>PNG, JPG, or WebP · compressed before upload</small></label><div class="reference-preview" id="reference-preview" hidden><img id="reference-preview-image" alt="Reference preview" /><div><b id="reference-preview-name"></b><small id="reference-preview-size"></small></div><button class="icon-button" type="button" id="reference-remove" aria-label="Remove reference image"><i class="ph ph-x"></i></button></div></div>
         <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
-        <div class="form-boundary"><i class="ph ph-info"></i><p>This saves the brief locally. Choose Codex, Claude Code, or OpenCode in the agent drawer to author and run the Blender build.</p></div>
+        <div class="form-boundary"><i class="ph ph-info"></i><p>The selected external LLM will inspect the prompt and optional reference, author <code>asset.json</code> + <code>build.py</code>, then Open3D runs Blender and QA before adoption.</p></div>
+        <div class="brief-agent"><label><span>BUILD AGENT</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div>
         <p class="form-status" id="create-status" aria-live="polite"></p>
-        <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="primary-action compact" type="submit"><i class="ph ph-floppy-disk"></i>Save asset brief</button></footer>
+        <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="quiet-button" type="submit"><i class="ph ph-floppy-disk"></i>Save brief</button><button class="primary-action compact" type="button" id="create-generate"><i class="ph ph-sparkle"></i>Generate asset</button></footer>
       </form>
     </div>
     <div class="agent-backdrop" id="agent-backdrop"></div>
@@ -80,7 +85,7 @@ app.innerHTML = `
       <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
-      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
+      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div class="agent-attachment" id="agent-attachment" hidden><i class="ph ph-image-square"></i><span id="agent-attachment-name"></span><button class="icon-button" type="button" id="agent-attachment-remove" aria-label="Remove attached reference"><i class="ph ph-x"></i></button></div><div><label class="agent-attach-button" for="agent-reference-file"><i class="ph ph-paperclip"></i>Reference<input id="agent-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /></label><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
     </aside>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
   </div>`;
@@ -148,6 +153,7 @@ async function refreshAgents() {
   try {
     [state.agents, state.agentPool] = await Promise.all([api("/api/agents"), api("/api/agent-pool")]);
     renderAgentProviderStatus();
+    syncCreateAgent();
     const ready = state.agents.filter((agent) => agent.status === "ACTIVE").map((agent) => agent.label).join(", ");
     updateAction(actionId, "done", ready ? `${ready} active` : "No authenticated LLM agent");
     addAgentMessage("agent", ready ? `${ready} active · ${state.agentPool?.status === "ACTIVE" ? "shared pool" : "direct CLI auth"}.` : "No authenticated external LLM agent. The build button is blocked until Codex, Claude Code, or OpenCode is authenticated.");
@@ -161,11 +167,123 @@ function persistDraft(draft) {
   try { localStorage.setItem("open3d.asset-draft", JSON.stringify(draft)); } catch { /* localStorage can be disabled in a locked-down browser */ }
 }
 
+function renderReferenceImage() {
+  const image = state.referenceImage;
+  const drop = document.querySelector(".reference-drop");
+  const label = document.querySelector("#reference-file-label");
+  const preview = document.querySelector("#reference-preview");
+  const previewImage = document.querySelector("#reference-preview-image");
+  const previewName = document.querySelector("#reference-preview-name");
+  const previewSize = document.querySelector("#reference-preview-size");
+  const attachment = document.querySelector("#agent-attachment");
+  const attachmentName = document.querySelector("#agent-attachment-name");
+  if (!drop || !label || !preview || !previewImage || !previewName || !previewSize) return;
+  drop.classList.toggle("has-file", Boolean(image));
+  label.textContent = image ? "Reference attached" : "Attach reference image";
+  preview.hidden = !image;
+  if (image) {
+    previewImage.src = image.data;
+    previewName.textContent = image.name;
+    previewSize.textContent = `${Math.round(image.data.length / 1024)} KB encoded`;
+  } else {
+    previewImage.removeAttribute("src");
+    previewName.textContent = "";
+    previewSize.textContent = "";
+  }
+  if (attachment && attachmentName) {
+    attachment.hidden = !image;
+    attachmentName.textContent = image ? `Reference · ${image.name}` : "";
+  }
+}
+
+function readDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read the reference image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressReferenceImage(dataUrl, fileName) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve({ name: `${fileName.replace(/\.[^.]+$/, "")}.jpg`, mime_type: "image/jpeg", data: canvas.toDataURL("image/jpeg", 0.78) });
+    };
+    image.onerror = () => reject(new Error("Reference image could not be decoded"));
+    image.src = dataUrl;
+  });
+}
+
+async function attachReferenceImage(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const status = document.querySelector("#create-status");
+  try {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Use a PNG, JPG, or WebP reference image");
+    let data = await readDataUrl(file);
+    let image = { name: file.name, mime_type: file.type, data };
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES || data.length > MAX_REFERENCE_DATA_URL_LENGTH) image = await compressReferenceImage(data, file.name);
+    if (image.data.length > MAX_REFERENCE_DATA_URL_LENGTH) throw new Error("Reference image is still too large after compression");
+    state.referenceImage = image;
+    renderReferenceImage();
+    if (status) status.textContent = `Attached ${file.name}. It will be staged for the external LLM.`;
+    else toast(`Attached ${file.name}`, "success");
+  } catch (error) {
+    event.target.value = "";
+    state.referenceImage = null;
+    renderReferenceImage();
+    if (status) status.textContent = error.message;
+    else toast(error.message, "error");
+  }
+}
+
+function removeReferenceImage() {
+  state.referenceImage = null;
+  const input = document.querySelector("#create-reference-file");
+  if (input) input.value = "";
+  renderReferenceImage();
+}
+
+function readBriefForm() {
+  const id = document.querySelector("#create-id").value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+  const prompt = document.querySelector("#create-prompt").value.trim();
+  const referencePath = document.querySelector("#create-reference").value.trim();
+  return { id, prompt, referencePath };
+}
+
+function saveBriefState(brief, generation = "draft-only") {
+  state.assetDraft = {
+    schema_version: "0.1.0", brief_id: brief.id, prompt: brief.prompt,
+    reference: { path: brief.referencePath, kind: brief.referencePath || state.referenceImage ? "attached" : "not-attached", image: state.referenceImage ? { name: state.referenceImage.name, mime_type: state.referenceImage.mime_type } : null },
+    views: REQUIRED_VIEWS, generation,
+  };
+  persistDraft(state.assetDraft);
+}
+
+function syncCreateAgent() {
+  const select = document.querySelector("#create-agent");
+  const status = document.querySelector("#create-agent-status");
+  if (!select || !status) return;
+  select.value = state.agentProvider;
+  const agent = state.agents.find((item) => item.agent_id === state.agentProvider) || { status: "CHECKING", reason: "CHECKING" };
+  status.className = `agent-provider-status ${agent.status.toLowerCase()}`;
+  status.textContent = agent.status === "ACTIVE" ? "ACTIVE" : agent.reason || agent.status;
+}
+
 function openCreateAsset() {
   state.createOpen = true;
   const layer = document.querySelector("#create-layer");
   layer.hidden = false;
   document.querySelector("#create-status").textContent = state.assetDraft ? "Loaded the last local brief draft." : "";
+  syncCreateAgent();
+  renderReferenceImage();
   document.querySelector("#create-id").focus();
 }
 
@@ -176,16 +294,13 @@ function closeCreateAsset() {
 
 function saveAssetDraft(event) {
   event.preventDefault();
-  const id = document.querySelector("#create-id").value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
-  const prompt = document.querySelector("#create-prompt").value.trim();
-  const referencePath = document.querySelector("#create-reference").value.trim();
+  const brief = readBriefForm();
   const status = document.querySelector("#create-status");
-  if (!id || !prompt) { status.textContent = "Asset ID and prompt are required."; return; }
-  state.assetDraft = { schema_version: "0.1.0", brief_id: id, prompt, reference: { path: referencePath, kind: referencePath ? "local-reference" : "not-attached" }, views: REQUIRED_VIEWS, generation: "draft-only" };
-  persistDraft(state.assetDraft);
+  if (!brief.id || !brief.prompt) { status.textContent = "Asset ID and prompt are required."; return; }
+  saveBriefState(brief);
   closeCreateAsset();
-  toast(`Saved brief ${id}`, "success");
-  addAgentMessage("agent", `Brief ${id} is ready. Select Codex, Claude Code, or OpenCode, then send the prompt to build it with Blender.`);
+  toast(`Saved brief ${brief.id}`, "success");
+  addAgentMessage("agent", `Brief ${brief.id} is ready. Open the agent drawer when you want to generate it with Blender.`);
   openAgent();
 }
 
@@ -238,13 +353,11 @@ function closeAgent() {
   document.querySelector("#agent-backdrop").classList.remove("is-open");
 }
 
-async function submitAgentMessage(event) {
-  event.preventDefault();
-  const input = document.querySelector("#agent-input");
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
-  addAgentMessage("user", text);
+async function executeAgentBuild(text) {
+  const attachment = state.referenceImage;
+  state.referenceImage = null;
+  renderReferenceImage();
+  addAgentMessage("user", attachment ? `${text}\n\nReference image attached: ${attachment.name}` : text);
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
   const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
@@ -255,7 +368,9 @@ async function submitAgentMessage(event) {
   addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
   updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
   try {
-    const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify({ agent: state.agentProvider, prompt: text, timeout: 900 }) });
+    const request = { agent: state.agentProvider, prompt: text, timeout: 900 };
+    if (attachment) request.reference_image = attachment;
+    const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify(request) });
     const output = (result.cli?.stdout || result.cli?.stderr || result.error || result.reason || "No build output").slice(0, 6000);
     if (result.status === "PASS") {
       updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
@@ -271,6 +386,25 @@ async function submitAgentMessage(event) {
     updateAction(actionId, "failed", error.message);
     addAgentMessage("agent", `${label} could not be reached: ${error.message}`);
   }
+}
+
+async function submitAgentMessage(event) {
+  event.preventDefault();
+  const input = document.querySelector("#agent-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  await executeAgentBuild(text);
+}
+
+async function generateAssetFromBrief() {
+  const brief = readBriefForm();
+  const status = document.querySelector("#create-status");
+  if (!brief.id || !brief.prompt) { status.textContent = "Asset ID and prompt are required."; return; }
+  saveBriefState(brief, "generation-requested");
+  closeCreateAsset();
+  openAgent();
+  await executeAgentBuild(brief.prompt);
 }
 
 async function applyAgentPatch(index) {
@@ -567,6 +701,12 @@ document.querySelector("#search").addEventListener("input", (event) => { state.q
 document.querySelector("#create-asset").addEventListener("click", openCreateAsset);
 document.querySelector("#quick-create").addEventListener("click", openCreateAsset);
 document.querySelector("#create-form").addEventListener("submit", saveAssetDraft);
+document.querySelector("#create-generate").addEventListener("click", generateAssetFromBrief);
+document.querySelector("#create-reference-file").addEventListener("change", attachReferenceImage);
+document.querySelector("#agent-reference-file").addEventListener("change", attachReferenceImage);
+document.querySelector("#reference-remove").addEventListener("click", removeReferenceImage);
+document.querySelector("#agent-attachment-remove").addEventListener("click", removeReferenceImage);
+document.querySelector("#create-agent").addEventListener("change", (event) => { state.agentProvider = event.target.value; renderAgentProviderStatus(); syncCreateAgent(); });
 document.querySelector("#create-close").addEventListener("click", closeCreateAsset);
 document.querySelector("#create-cancel").addEventListener("click", closeCreateAsset);
 document.querySelector("[data-close-create]").addEventListener("click", closeCreateAsset);

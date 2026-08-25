@@ -62,6 +62,8 @@ python -m open3d_artist serve examples/watering-can
 
 Open3D probes `${OPEN3D_AGENT_POOL_URL}/v1/models`; a failed pool probe blocks every agent instead of silently switching to direct credentials. Leave the pool variables unset to use each CLI's own authenticated session.
 
+If OpenCode's saved config points to an unavailable model, set `OPEN3D_OPENCODE_MODEL` to a model available to that OpenCode credential; this override is ignored when the shared pool is configured.
+
 ## Repository map
 
 ```text

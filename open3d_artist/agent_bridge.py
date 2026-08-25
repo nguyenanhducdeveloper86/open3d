@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -22,10 +23,12 @@ MAX_TIMEOUT = 60.0
 MAX_PLAN_PROMPT = 8 * 1024
 MAX_BUILD_TIMEOUT = 900.0
 MAX_BUILD_PROMPT = 16 * 1024
+MAX_REFERENCE_IMAGE_BYTES = 600 * 1024
 AGENTS = ("codex", "claude", "opencode")
 POOL_URL_ENV = "OPEN3D_AGENT_POOL_URL"
 POOL_TOKEN_ENV = "OPEN3D_AGENT_POOL_TOKEN"
 POOL_MODEL_ENV = "OPEN3D_AGENT_POOL_MODEL"
+OPENCODE_MODEL_ENV = "OPEN3D_OPENCODE_MODEL"
 
 
 def _agent_label(agent: str) -> str:
@@ -43,6 +46,10 @@ def _pool_config() -> dict[str, str]:
         "token": os.environ.get(POOL_TOKEN_ENV, "").strip(),
         "model": os.environ.get(POOL_MODEL_ENV, "auto").strip() or "auto",
     }
+
+
+def _opencode_model() -> str:
+    return os.environ.get(OPENCODE_MODEL_ENV, "").strip()
 
 
 def _safe_url(value: str) -> str:
@@ -202,6 +209,8 @@ def _run_agent_command(agent: str, executable: str, prompt: str, *, cwd: Path, t
         pool = _pool_config()
         if pool["url"]:
             command.extend(["--model", f"open3d-pool/{pool['model']}"])
+        elif _opencode_model():
+            command.extend(["--model", _opencode_model()])
         command.append(prompt)
         input_value = b""
     else:
@@ -293,11 +302,44 @@ def run_agent_plan(agent: str, prompt: str, project: str | Path, *, timeout: flo
             "exit_status": getattr(completed, "returncode", None), "mutations": "NONE", "project_state_unchanged": True}
 
 
-def _agent_build_instruction(prompt: str) -> str:
+def _stage_reference_image(reference_image: Any, workspace: Path) -> dict[str, Any] | None:
+    if reference_image is None:
+        return None
+    if not isinstance(reference_image, dict):
+        raise ProjectError("reference_image must be an object")
+    mime_type = str(reference_image.get("mime_type", "")).lower()
+    mime_aliases = {"image/jpg": "image/jpeg"}
+    mime_type = mime_aliases.get(mime_type, mime_type)
+    extensions = {"image/png": ("png", b"\x89PNG\r\n\x1a\n"), "image/jpeg": ("jpg", b"\xff\xd8"), "image/webp": ("webp", b"RIFF")}
+    if mime_type not in extensions:
+        raise ProjectError("reference_image must be PNG, JPEG, or WebP")
+    data_url = reference_image.get("data")
+    prefix = f"data:{mime_type};base64,"
+    if not isinstance(data_url, str) or not data_url.startswith(prefix):
+        raise ProjectError("reference_image data must be a base64 data URL")
+    try:
+        raw = base64.b64decode(data_url[len(prefix):], validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ProjectError("reference_image data is not valid base64") from exc
+    extension, magic = extensions[mime_type]
+    if not raw or len(raw) > MAX_REFERENCE_IMAGE_BYTES or not raw.startswith(magic):
+        raise ProjectError("reference_image is empty, too large, or has the wrong file signature")
+    if mime_type == "image/webp" and b"WEBP" not in raw[:16]:
+        raise ProjectError("reference_image is not a valid WebP file")
+    path = workspace / f"reference-image.{extension}"
+    path.write_bytes(raw)
+    return {"name": str(reference_image.get("name") or path.name)[:128], "mime_type": mime_type,
+            "bytes": len(raw), "path": str(path.name)}
+
+
+def _agent_build_instruction(prompt: str, reference_path: str | None = None) -> str:
+    reference_note = (f"\nA user reference image is staged at `{reference_path}`. Inspect it with the available agent tools and use it as visual guidance; do not copy hidden metadata or claim image-to-mesh reconstruction.\n"
+                      if reference_path else "")
     return f"""You are the Open3D Blender asset builder. Work only in the current workspace.
 
 Open3D will execute your build.py with Blender after you finish. The user request is:
 {prompt.strip()}
+{reference_note}
 
 Required files in the current workspace:
 1. asset.json — a valid Open3D v0.1 asset contract. It must contain schema_version, asset_id, kind, units=m, positive dimensions, non-empty semantic parts, geometry.triangle_budget.max, and outputs.
@@ -327,7 +369,8 @@ def _cli_failure_reason(completed: Any) -> str:
 def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: float = 900,
                     runner: Callable[..., Any] = subprocess.run,
                     which: Callable[[str], str | None] = shutil.which,
-                    worker: Any | None = None) -> dict[str, Any]:
+                    worker: Any | None = None,
+                    reference_image: dict[str, Any] | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -359,6 +402,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     output = run_dir / "output"
     workspace.mkdir()
     output.mkdir()
+    staged_reference = _stage_reference_image(reference_image, workspace)
     project_obj = Project(project_path)
     current_ref = project_obj.current()
     (workspace / "current_asset.json").write_text(json.dumps(project_obj.load_current_asset(), ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -374,8 +418,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                 source = previous_path / source_name
                 if source.is_file() and not source.is_symlink():
                     shutil.copy2(source, workspace / target_name)
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip()}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    instruction = _agent_build_instruction(prompt)
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None)
     completed = None
     try:
         completed = _run_agent_command(agent, executable, instruction, cwd=workspace, timeout=float(timeout), runner=runner, build=True)
@@ -390,6 +434,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     common = {
         "schema_version": "0.1.0", "agent": agent, "run": str(run_dir.relative_to(project_path)),
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
+        "reference_image": staged_reference,
         "pool": pool,
         "cli": {"status": cli_status, "reason": cli_reason, "executable": executable, "stdout": stdout, "stderr": stderr,
                 "exit_status": getattr(completed, "returncode", None)},
@@ -473,6 +518,8 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
     else:
         argv = ["opencode", "run", "--dir", str(run_path), "--format", "default", "--auto"]
     command = [executable, *argv[1:]] if executable else [agent, *argv[1:]]
+    if agent == "opencode" and not _pool_config()["url"] and _opencode_model():
+        command.extend(["--model", _opencode_model()])
     status, reason, completed = "UNAVAILABLE", "CLI_NOT_INSTALLED", None
     version = None
     try:
