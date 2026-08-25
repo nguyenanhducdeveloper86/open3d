@@ -27,6 +27,7 @@ const state = {
   production: null,
   activeView: "workspace",
   selectedPart: null,
+  viewportMode: "orbit",
   query: "",
   theme: "dark",
   busy: false,
@@ -171,7 +172,7 @@ function renderBuildStatus() {
     runButton.disabled = running;
     runButton.innerHTML = running ? `<i class="build-spinner"></i>Build running` : runButton.dataset.idleText;
   }
-  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected", "#annotate-tool"].forEach((selector) => {
+  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected", "#annotate-tool", "#orbit-tool", "#grab-tool"].forEach((selector) => {
     const control = document.querySelector(selector);
     if (control) control.disabled = running;
   });
@@ -615,11 +616,13 @@ function renderWorkspace() {
   const contract = state.inspect.contract;
   const query = state.query.toLowerCase();
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
-  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="annotate-tool" title="Mark an area to comment with the agent"><i class="ph ph-pencil-simple"></i><span>Mark area</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame asset" aria-label="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Wheel zoom</span><span>Shift-drag pan</span></div><div class="viewport-annotation-layer" id="annotation-layer" aria-hidden="true"><div class="annotation-box" id="annotation-box" hidden><span>MARKED AREA</span></div><div class="annotation-actions" id="annotation-actions" hidden><span id="annotation-label">Area marked</span><button class="quiet-button" id="annotation-comment" type="button"><i class="ph ph-chat-circle-text"></i>Comment</button><button class="icon-button" id="annotation-clear" type="button" aria-label="Clear marked area"><i class="ph ph-x"></i></button></div></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
+  viewRoot.innerHTML = `<div class="workspace-grid"><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit 360"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="grab-tool" title="Grab and rotate asset"><i class="ph ph-hand-grabbing"></i><span>Grab</span></button><button class="tool-button" id="annotate-tool" title="Mark an area to comment with the agent"><i class="ph ph-pencil-simple"></i><span>Mark area</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame asset" aria-label="Frame asset"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>GLB / ${escapeHtml(state.inspect.current.qa_status)}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Wheel zoom</span><span>Shift-drag pan</span></div><div class="viewport-annotation-layer" id="annotation-layer" aria-hidden="true"><div class="annotation-box" id="annotation-box" hidden><span>MARKED AREA</span></div><div class="annotation-actions" id="annotation-actions" hidden><span id="annotation-label">Area marked</span><button class="quiet-button" id="annotation-comment" type="button"><i class="ph ph-chat-circle-text"></i>Comment</button><button class="icon-button" id="annotation-clear" type="button" aria-label="Clear marked area"><i class="ph ph-x"></i></button></div></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading geometry</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${state.report.metrics?.triangles ?? "-"}</b></div></div></section></div></aside></div>`;
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
   document.querySelector("#part-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => selectPart(button.dataset.part)));
   document.querySelector("#comment-selected")?.addEventListener("click", openAgent);
   document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; clearAnnotation(); renderView(); renderAgentThread(); highlightPart(null); });
+  document.querySelector("#orbit-tool").addEventListener("click", () => setViewportMode("orbit"));
+  document.querySelector("#grab-tool").addEventListener("click", () => setViewportMode("grab"));
   document.querySelector("#focus-part-tool").addEventListener("click", frameSelectedPart);
   document.querySelector("#frame-tool").addEventListener("click", frameAsset);
   document.querySelector("#zoom-out-tool").addEventListener("click", () => zoomViewer(1.2));
@@ -629,6 +632,7 @@ function renderWorkspace() {
   document.querySelector("#annotation-comment").addEventListener("click", openAgent);
   document.querySelector("#annotation-clear").addEventListener("click", clearAnnotation);
   mountViewer();
+  setViewportMode(state.viewportMode);
   bindAnnotationLayer();
   renderAnnotationLayer();
 }
@@ -667,13 +671,37 @@ function hash(value) { return [...value].reduce((total, character) => ((total <<
 
 function selectPart(partId, preserveAnnotation = false) {
   state.selectedPart = partId;
-  if (!preserveAnnotation) { state.annotationMode = false; annotationDraft = null; state.annotation = null; }
-  renderView();
+  if (!preserveAnnotation) {
+    state.annotationMode = false;
+    annotationDraft = null;
+    state.annotation = null;
+    if (state.referenceImage?.name.startsWith("marked-area-")) removeReferenceImage();
+  }
+  updateSelectionUI();
+  highlightPart(partId);
+  renderAnnotationLayer();
   renderAgentThread();
-  loadArtifact();
+}
+
+function updateSelectionUI() {
+  const panel = document.querySelector("#selected-part");
+  if (panel) {
+    panel.innerHTML = selectedPartMarkup();
+    panel.querySelector("#comment-selected")?.addEventListener("click", openAgent);
+  }
+  document.querySelectorAll("#part-list .part-row").forEach((row) => row.classList.toggle("active", row.dataset.part === state.selectedPart));
+}
+
+function setViewportMode(mode) {
+  state.viewportMode = mode;
+  if (viewer.controls) viewer.controls.enabled = mode === "orbit";
+  document.querySelector("#orbit-tool")?.classList.toggle("active", mode === "orbit");
+  document.querySelector("#grab-tool")?.classList.toggle("active", mode === "grab");
+  document.querySelector("#viewport")?.classList.toggle("is-grabbing", mode === "grab");
 }
 
 function disposeViewer() {
+  objectDrag = null;
   if (viewer.resize) viewer.resize.disconnect();
   if (viewer.controls) viewer.controls.dispose();
   if (viewer.frame) cancelAnimationFrame(viewer.frame);
@@ -699,8 +727,14 @@ function mountViewer() {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  controls.minPolarAngle = 0.01;
+  controls.maxPolarAngle = Math.PI - 0.01;
+  controls.minAzimuthAngle = -Infinity;
+  controls.maxAzimuthAngle = Infinity;
+  controls.enablePan = true;
   controls.minDistance = 0.2;
   controls.maxDistance = 20;
+  controls.enabled = state.viewportMode === "orbit";
   scene.add(new THREE.HemisphereLight(0xe5f2e9, 0x161b18, 2.2));
   const key = new THREE.DirectionalLight(0xffffff, 3.3);
   key.position.set(3, 5, 4);
@@ -715,7 +749,10 @@ function mountViewer() {
   viewer.scene = scene; viewer.camera = camera; viewer.renderer = renderer; viewer.controls = controls; viewer.canvas = renderer.domElement;
   viewer.resize = new ResizeObserver(() => resizeViewer(viewport));
   viewer.resize.observe(viewport);
-  renderer.domElement.addEventListener("pointerdown", pickPart);
+  renderer.domElement.addEventListener("pointerdown", handleViewportPointerDown);
+  renderer.domElement.addEventListener("pointermove", handleViewportPointerMove);
+  renderer.domElement.addEventListener("pointerup", handleViewportPointerUp);
+  renderer.domElement.addEventListener("pointercancel", handleViewportPointerUp);
   const animate = () => { controls.update(); renderer.render(scene, camera); viewer.frame = requestAnimationFrame(animate); };
   animate();
   resizeViewer(viewport);
@@ -751,6 +788,33 @@ async function loadArtifact() {
 }
 
 function countMeshes(root) { let count = 0; root.traverse((node) => { if (node.isMesh) count++; }); return count; }
+
+let objectDrag = null;
+
+function handleViewportPointerDown(event) {
+  const partId = partAtClientPoint(event);
+  if (partId) selectPart(partId);
+  if (state.viewportMode !== "grab" || !viewer.root) return;
+  event.preventDefault();
+  objectDrag = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY };
+  viewer.canvas.setPointerCapture(event.pointerId);
+}
+
+function handleViewportPointerMove(event) {
+  if (!objectDrag || !viewer.root) return;
+  const deltaX = event.clientX - objectDrag.lastX;
+  const deltaY = event.clientY - objectDrag.lastY;
+  objectDrag.lastX = event.clientX;
+  objectDrag.lastY = event.clientY;
+  viewer.root.rotation.y += deltaX * 0.01;
+  viewer.root.rotation.x += deltaY * 0.01;
+}
+
+function handleViewportPointerUp(event) {
+  if (!objectDrag) return;
+  if (viewer.canvas.hasPointerCapture(event.pointerId)) viewer.canvas.releasePointerCapture(event.pointerId);
+  objectDrag = null;
+}
 
 function partAtClientPoint(event) {
   if (!viewer.root || !viewer.canvas) return null;
