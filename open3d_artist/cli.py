@@ -45,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("project", type=Path)
     rollback.add_argument("checkpoint_id")
 
+    versions = commands.add_parser("versions", help="list immutable asset versions")
+    versions.add_argument("project", type=Path)
+
+    undo = commands.add_parser("undo", help="restore the previous asset version")
+    undo.add_argument("project", type=Path)
+
     export = commands.add_parser("export", help="copy the current GLB")
     export.add_argument("project", type=Path)
     export.add_argument("output", type=Path)
@@ -151,6 +157,10 @@ def main(argv: list[str] | None = None) -> int:
             _json(project.edit_part(args.part_id, scales, idempotency_key=args.idempotency_key))
         elif args.command == "rollback":
             _json(project.rollback(args.checkpoint_id))
+        elif args.command == "versions":
+            _json(project.asset_versions())
+        elif args.command == "undo":
+            _json(project.undo())
         elif args.command == "export":
             _json({"artifact": project.current()["glb_artifact"], "output": str(project.export_glb(args.output))})
         elif args.command == "mcp":

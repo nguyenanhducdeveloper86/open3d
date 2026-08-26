@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from open3d_artist.geometry import generate_glb
 from open3d_artist.project import Project
 
 
@@ -36,6 +37,38 @@ class CoreWorkflowTest(unittest.TestCase):
             project.rollback(before["checkpoint_id"])
             self.assertEqual(project.current()["glb_artifact"], before["glb_artifact"])
             self.assertEqual(project.validate()["status"], "PASS")
+
+    def test_asset_versions_and_undo_restore_previous_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "asset"
+            root.mkdir()
+            (root / "asset.yaml").write_text(json.dumps(ASSET), encoding="utf-8")
+            project = Project.init(root, root / "asset.yaml")
+            before = project.current()
+            initial = project.asset_versions()
+            self.assertEqual(initial["current_version"], "v001")
+            self.assertFalse(initial["can_undo"])
+
+            project.edit_part("handle", {"x": 1.1}, idempotency_key="versioned-edit")
+            edited = project.asset_versions()
+            self.assertEqual([item["version_id"] for item in edited["versions"]], ["v001", "v002"])
+            self.assertEqual(edited["current_version"], "v002")
+            self.assertTrue(edited["can_undo"])
+
+            undone = project.undo()
+            self.assertEqual(undone["status"], "PASS")
+            self.assertEqual(undone["restored_version"]["version_id"], "v001")
+            self.assertEqual(project.current()["glb_artifact"], before["glb_artifact"])
+            restored = project.asset_versions()
+            self.assertEqual(restored["current_version"], "v001")
+            self.assertFalse(restored["can_undo"])
+
+            second_asset = json.loads(json.dumps(ASSET))
+            second_asset["asset_id"] = "TEST-PROP-002"
+            project.replace_generated_asset(second_asset, generate_glb(second_asset), agent="codex", prompt="new asset", run_id="test-run")
+            self.assertEqual(project.asset_versions()["current_version"], "v001")
+            self.assertFalse(project.asset_versions()["can_undo"])
+            self.assertEqual(project.undo()["status"], "NOOP")
 
 
 if __name__ == "__main__":

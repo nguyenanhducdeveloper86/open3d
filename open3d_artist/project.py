@@ -336,6 +336,114 @@ class Project:
             return []
         return [json.loads(line) for line in self.operations.read_text(encoding="utf-8").splitlines() if line]
 
+    @staticmethod
+    def _version_signature(ref: dict[str, Any]) -> tuple[Any, ...]:
+        # QA reports are refreshable metadata; a validation run must not create a new asset version.
+        return tuple(ref.get(key) for key in ("asset_id", "contract_artifact", "glb_artifact", "blend_artifact"))
+
+    def _checkpoint_records(self) -> dict[str, dict[str, Any]]:
+        records: dict[str, dict[str, Any]] = {}
+        if not self.checkpoints.is_dir():
+            return records
+        for path in self.checkpoints.glob("*.json"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            checkpoint_id = record.get("checkpoint_id")
+            if re.fullmatch(r"sha256:[0-9a-f]{64}", str(checkpoint_id)) and isinstance(record.get("ref"), dict):
+                records[checkpoint_id] = record
+        return records
+
+    def asset_versions(self, asset_id: str | None = None) -> dict[str, Any]:
+        """Return distinct immutable asset states in their operation order."""
+
+        if asset_id is not None and (not isinstance(asset_id, str) or not asset_id.strip()):
+            raise ProjectError("asset_id must be a non-empty string")
+        current = self.current()
+        records = self._checkpoint_records()
+        versions: list[dict[str, Any]] = []
+        seen: set[tuple[Any, ...]] = set()
+        next_numbers: dict[str, int] = {}
+
+        def add(checkpoint_id: Any, operation: dict[str, Any] | None = None) -> None:
+            if not isinstance(checkpoint_id, str) or checkpoint_id not in records:
+                return
+            record = records[checkpoint_id]
+            ref = record["ref"]
+            ref_asset_id = ref.get("asset_id")
+            if asset_id is not None and ref_asset_id != asset_id:
+                return
+            signature = self._version_signature(ref)
+            if signature in seen:
+                return
+            seen.add(signature)
+            number = next_numbers.get(str(ref_asset_id), 0) + 1
+            next_numbers[str(ref_asset_id)] = number
+            versions.append({
+                "version_id": f"v{number:03d}",
+                "checkpoint_id": checkpoint_id,
+                "parent_checkpoint": record.get("parent_checkpoint"),
+                "asset_id": ref_asset_id,
+                "contract_artifact": ref.get("contract_artifact"),
+                "glb_artifact": ref.get("glb_artifact"),
+                "qa_artifact": ref.get("qa_artifact"),
+                "blend_artifact": ref.get("blend_artifact"),
+                "qa_status": ref.get("qa_status", "UNKNOWN"),
+                "geometry_source": ref.get("geometry_source", "contract"),
+                "operation_id": (operation or {}).get("operation_id") or record.get("operation_id"),
+                "operation": (operation or {}).get("name") or record.get("operation_id"),
+                "note": (operation or {}).get("note") or record.get("note") or "saved asset version",
+                "current": False,
+            })
+
+        for record in records.values():
+            if record.get("operation_id") == "op_init":
+                add(record.get("checkpoint_id"))
+                break
+        for operation in self.history():
+            add(operation.get("result_checkpoint"), operation)
+        add(current.get("checkpoint_id"))
+        if not versions:
+            add(current.get("checkpoint_id"))
+
+        current_signature = self._version_signature(current)
+        current_version = None
+        current_asset_index = -1
+        for index, version in enumerate(versions):
+            version["current"] = self._version_signature(version) == current_signature
+            if version["current"]:
+                current_version = version
+                current_asset_index = sum(1 for previous in versions[:index] if previous.get("asset_id") == current.get("asset_id"))
+        return {
+            "schema_version": "0.1.0",
+            "current_checkpoint": current.get("checkpoint_id"),
+            "current_version": current_version["version_id"] if current_version else None,
+            "can_undo": current_asset_index > 0,
+            "versions": versions,
+        }
+
+    def undo(self) -> dict[str, Any]:
+        """Restore the distinct asset version immediately before the current one."""
+
+        current = self.current()
+        listing = self.asset_versions(current.get("asset_id"))
+        current_index = next((index for index, version in enumerate(listing["versions"]) if version["current"]), -1)
+        if current_index <= 0:
+            return {"status": "NOOP", "reason": "NO_PREVIOUS_VERSION", "current": self.current(), "versions": listing}
+        current_version = listing["versions"][current_index]
+        previous_version = listing["versions"][current_index - 1]
+        restored = self.rollback(previous_version["checkpoint_id"])
+        return {
+            "status": "PASS",
+            "action": "undo",
+            "undone_version": current_version,
+            "restored_version": previous_version,
+            "current": restored,
+        }
+
     def validate(self) -> dict[str, Any]:
         current = self.current()
         asset = self.load_current_asset()

@@ -9,7 +9,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .agent_bridge import agent_catalog, agent_pool_status, run_agent_build, run_agent_plan
 from .project import Project, ProjectError
@@ -69,7 +69,8 @@ class _Handler(BaseHTTPRequestHandler):
         return value
 
     def do_GET(self) -> None:
-        path = unquote(urlparse(self.path).path)
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
         try:
             with self.server.lock:
                 if path == "/api/health":
@@ -80,6 +81,9 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(HTTPStatus.OK, self.server.project.validate())
                 if path == "/api/history":
                     return self._send(HTTPStatus.OK, self.server.project.history())
+                if path == "/api/versions":
+                    asset_id = parse_qs(parsed.query).get("asset_id", [None])[0]
+                    return self._send(HTTPStatus.OK, self.server.project.asset_versions(asset_id))
                 if path == "/api/workspace":
                     return self._send(HTTPStatus.OK, self.server.project.workspace())
                 if path == "/api/providers":
@@ -98,6 +102,8 @@ class _Handler(BaseHTTPRequestHandler):
                     asset = self.server.project.workspace_asset(path_parts[3])
                     data = self.server.project.store.read_bytes(asset["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
+                if len(path_parts) == 5 and path_parts[1:3] == ["api", "assets"] and path_parts[4] == "versions":
+                    return self._send(HTTPStatus.OK, self.server.project.asset_versions(path_parts[3]))
                 if path == "/api/production/state":
                     return self._send(HTTPStatus.OK, production_state(self.server.project))
                 if path == "/api/production/release":
@@ -124,6 +130,8 @@ class _Handler(BaseHTTPRequestHandler):
                     value = self.server.project.edit_part(body["part_id"], scales, idempotency_key=body.get("idempotency_key"))
                 elif path == "/api/rollback":
                     value = self.server.project.rollback(body["checkpoint_id"])
+                elif path == "/api/undo":
+                    value = self.server.project.undo()
                 elif path == "/api/provider/meshy":
                     value = MeshyImageTo3D().generate(self.server.project, image_url=body["image_url"], consent=body.get("consent") is True, timeout=float(body.get("timeout", 900)))
                 elif path == "/api/blender/run":

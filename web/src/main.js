@@ -17,6 +17,7 @@ const state = {
   inspect: null,
   report: null,
   history: [],
+  versions: { schema_version: "0.1.0", current_version: null, current_checkpoint: null, can_undo: false, versions: [] },
   providers: [],
   agents: [
     { agent_id: "codex", label: "Codex", status: "CHECKING" },
@@ -663,12 +664,13 @@ async function api(path, options = {}) {
 
 async function loadState() {
   try {
-    const [inspect, report, history, providers, workspace] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers"), api("/api/workspace")]);
+    const [inspect, report, history, providers, workspace, versions] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/providers"), api("/api/workspace"), api("/api/versions")]);
     state.inspect = inspect;
     state.report = report;
     state.history = history;
     state.providers = providers;
     state.workspace = workspace;
+    state.versions = versions;
     state.production = await api("/api/production/state").catch((error) => ({ status: "UNAVAILABLE", error: error.message }));
     [state.agents, state.agentPool] = await Promise.all([
       api("/api/agents").catch(() => state.agents),
@@ -744,11 +746,14 @@ function renderWorkspace() {
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
   const selectedCount = selectedPartDescriptors().length;
   const qaStatus = asset.qa_status || (asset.asset_id === state.inspect.current.asset_id ? state.report.status : "UNVERIFIED");
+  const selectedVersion = currentAssetVersion(asset);
+  const versionCount = assetVersions(asset.asset_id).length || 1;
+  const canUndo = asset.asset_id === state.inspect.current.asset_id && state.versions?.can_undo;
   viewRoot.innerHTML = `
     <div class="workspace-shell">
       <div class="workspace-topline">
         <div class="workspace-context"><div class="eyebrow">EDIT WORKSPACE</div><div class="workspace-title-row"><h1>${escapeHtml(asset.name || asset.asset_id)}</h1><span class="workspace-status ${String(qaStatus).toLowerCase()}"><i class="ph ph-check-circle"></i>${escapeHtml(qaStatus)}</span></div><p><span id="workspace-selection-copy">${selectedCount ? `${selectedCount} subject${selectedCount === 1 ? "" : "s"} selected` : "Select a subject component to edit or comment"}</span> · Shift-click adds subjects to one agent request</p></div>
-        <div class="workspace-actions"><button class="top-action" id="workspace-agent"><i class="ph ph-sparkle"></i><span>Open agent</span></button><button class="primary-action compact" id="workspace-generate"><i class="ph ph-plus"></i> Create 3D asset</button></div>
+        <div class="workspace-actions"><button class="top-action version-action" id="workspace-history"><i class="ph ph-clock-counter-clockwise"></i><span>${escapeHtml(selectedVersion?.version_id || "v001")} · ${versionCount} versions</span></button><button class="top-action undo-action" id="workspace-undo" type="button" ${canUndo ? "" : "disabled"} title="Undo the latest asset version"><i class="ph ph-arrow-u-up-left"></i><span>Undo</span><kbd>⌘Z</kbd></button><button class="top-action" id="workspace-agent"><i class="ph ph-sparkle"></i><span>Open agent</span></button><button class="primary-action compact" id="workspace-generate"><i class="ph ph-plus"></i> Create 3D asset</button></div>
       </div>
       <div class="workspace-grid">
         <aside class="asset-library-panel"><div class="library-header"><div><div class="eyebrow">SCENE LIBRARY</div><h2>Assets</h2><span>${assets.length} asset${assets.length === 1 ? "" : "s"} · ${state.workspace?.scene?.instances?.length || 0} instance${(state.workspace?.scene?.instances?.length || 0) === 1 ? "" : "s"}</span></div><button class="icon-button" id="library-generate" title="Create a 3D asset" aria-label="Create a 3D asset"><i class="ph ph-plus"></i></button></div><div class="library-hint"><i class="ph ph-hand-pointing"></i><span>Drag to place · click to inspect · + to add another instance</span></div><div class="asset-library-list">${assets.map((item) => assetLibraryCard(item)).join("")}</div></aside>
@@ -758,6 +763,8 @@ function renderWorkspace() {
     </div>`;
   document.querySelector("#inspector-pane")?.insertAdjacentHTML("afterbegin", `<section class="panel-section asset-details-section">${selectedAssetDetailsMarkup(asset, contract, qaStatus)}</section>`);
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
+  document.querySelector("#asset-versions")?.addEventListener("click", openHistory);
+  document.querySelector("#asset-undo")?.addEventListener("click", undoAsset);
   document.querySelectorAll("[data-inspector-tab]").forEach((button) => button.addEventListener("click", () => setInspectorTab(button.dataset.inspectorTab)));
   setInspectorTab(state.inspectorTab);
   document.querySelector("#part-list")?.querySelectorAll("button").forEach((button) => button.addEventListener("click", (event) => selectPart(button.dataset.part, false, event.shiftKey)));
@@ -770,6 +777,8 @@ function renderWorkspace() {
   document.querySelectorAll("[data-library-remove]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); removeSceneInstance(button.dataset.libraryRemove); }));
   document.querySelector("#library-generate").addEventListener("click", () => openCreateAsset());
   document.querySelector("#workspace-generate").addEventListener("click", () => openCreateAsset());
+  document.querySelector("#workspace-history").addEventListener("click", openHistory);
+  document.querySelector("#workspace-undo").addEventListener("click", undoAsset);
   document.querySelector("#workspace-agent").addEventListener("click", openAgent);
   document.querySelector("#comment-selected")?.addEventListener("click", openAgent);
   document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; state.selectedParts = []; clearAnnotation(); updateSelectionUI(); highlightPart(null); renderAgentThread(); });
@@ -798,16 +807,22 @@ function assetLibraryCard(asset) {
   const active = asset.asset_id === state.selectedAssetId ? "active" : "";
   const assetInstances = selectedAssetInstances(asset.asset_id);
   const instances = assetInstances.length;
+  const versions = assetVersions(asset.asset_id);
+  const version = currentAssetVersion(asset);
   const overlapCount = instances - new Set(assetInstances.map(instanceTransformKey)).size;
   const overlapNote = overlapCount ? ` · ${overlapCount} overlapping` : "";
   const instanceRows = instances ? assetInstances.map((instance, index) => `<div class="asset-instance-row"><span>Instance ${index + 1}${overlapCount && index ? " · overlapping" : ""}</span><button class="quiet-button" data-library-remove="${escapeHtml(instance.instance_id)}" type="button">Remove</button></div>`).join("") : `<div class="asset-instance-empty">Catalog only · 0 in scene</div>`;
-  return `<article class="asset-library-card ${active}" data-library-asset="${escapeHtml(asset.asset_id)}" draggable="true"><span class="asset-library-swatch swatch-${Math.abs(hash(asset.asset_id)) % 5}"></span><div><b>${escapeHtml(asset.name || asset.asset_id)}</b><small>${escapeHtml(asset.kind)} · ${instances} in scene${overlapNote}</small>${instanceRows}</div><button class="icon-button" data-library-add="${escapeHtml(asset.asset_id)}" title="Add instance" aria-label="Add ${escapeHtml(asset.asset_id)} to scene"><i class="ph ph-plus"></i></button></article>`;
+  const versionNote = version ? ` · ${version.version_id}` : versions.length ? ` · ${versions.length} versions` : "";
+  return `<article class="asset-library-card ${active}" data-library-asset="${escapeHtml(asset.asset_id)}" draggable="true"><span class="asset-library-swatch swatch-${Math.abs(hash(asset.asset_id)) % 5}"></span><div><b>${escapeHtml(asset.name || asset.asset_id)}</b><small>${escapeHtml(asset.kind)} · ${instances} in scene${overlapNote}${versionNote}</small>${instanceRows}</div><button class="icon-button" data-library-add="${escapeHtml(asset.asset_id)}" title="Add instance" aria-label="Add ${escapeHtml(asset.asset_id)} to scene"><i class="ph ph-plus"></i></button></article>`;
 }
 
 function selectedAssetDetailsMarkup(asset, contract, qaStatus) {
   const dimensions = contract.dimensions || {};
   const count = selectedAssetInstances(asset.asset_id).length;
-  return `<div class="section-heading"><span>ASSET DETAILS</span><span class="section-count">${count} instance${count === 1 ? "" : "s"}</span></div><div class="asset-detail-title"><b>${escapeHtml(asset.name || asset.asset_id)}</b><span class="workspace-status ${String(qaStatus).toLowerCase()}">${escapeHtml(qaStatus)}</span></div><div class="asset-detail-grid"><span><small>DIMENSIONS</small><b>${dimensions.width ?? "-"} × ${dimensions.depth ?? "-"} × ${dimensions.height ?? "-"} ${escapeHtml(contract.units || "")}</b></span><span><small>SOURCE</small><b>${escapeHtml(asset.geometry_source || "UNKNOWN")}</b></span></div>`;
+  const versions = assetVersions(asset.asset_id);
+  const version = currentAssetVersion(asset);
+  const isCurrent = asset.asset_id === state.inspect.current.asset_id;
+  return `<div class="section-heading"><span>ASSET DETAILS</span><span class="section-count">${count} instance${count === 1 ? "" : "s"}</span></div><div class="asset-detail-title"><b>${escapeHtml(asset.name || asset.asset_id)}</b><span class="workspace-status ${String(qaStatus).toLowerCase()}">${escapeHtml(qaStatus)}</span></div><div class="asset-detail-grid"><span><small>DIMENSIONS</small><b>${dimensions.width ?? "-"} × ${dimensions.depth ?? "-"} × ${dimensions.height ?? "-"} ${escapeHtml(contract.units || "")}</b></span><span><small>SOURCE</small><b>${escapeHtml(asset.geometry_source || "UNKNOWN")}</b></span></div><div class="asset-version-row"><span><small>VERSION</small><b>${escapeHtml(version?.version_id || "v001")} · ${versions.length || 1} saved</b></span><button class="quiet-button" id="asset-versions" type="button">View versions</button></div>${isCurrent ? `<button class="quiet-button asset-undo-button" id="asset-undo" type="button" ${state.versions?.can_undo ? "" : "disabled"}><i class="ph ph-arrow-u-up-left"></i>Undo latest version</button>` : ""}`;
 }
 
 async function removeSceneInstance(instanceId) {
@@ -839,6 +854,15 @@ function selectWorkspaceAsset(assetId) {
   state.annotationMode = false;
   renderView();
   loadArtifact();
+}
+
+function assetVersions(assetId) {
+  return (state.versions?.versions || []).filter((version) => version.asset_id === assetId);
+}
+
+function currentAssetVersion(asset) {
+  const versions = assetVersions(asset.asset_id);
+  return versions.find((version) => version.contract_artifact === asset.contract_artifact && version.glb_artifact === asset.glb_artifact) || versions.at(-1) || null;
 }
 
 async function addAssetToScene(assetId, position = null) {
@@ -886,9 +910,50 @@ function renderQa() {
   document.querySelector("#rerun-qa").addEventListener("click", runQa);
 }
 
+function openHistory() {
+  state.activeView = "history";
+  renderView();
+}
+
+async function undoAsset() {
+  if (state.busy) return;
+  if (state.selectedAssetId !== state.inspect.current.asset_id || !state.versions?.can_undo) { toast("No previous version for the current asset."); return; }
+  const current = state.versions.versions.find((version) => version.current);
+  const index = state.versions.versions.indexOf(current);
+  const previous = index > 0 ? state.versions.versions[index - 1] : null;
+  if (!current || !previous || !confirm(`Undo ${current.version_id} and restore ${previous.version_id}?`)) return;
+  try {
+    state.busy = true;
+    const result = await api("/api/undo", { method: "POST", body: JSON.stringify({}) });
+    if (result.status === "NOOP") { toast("No previous asset version to undo."); return; }
+    toast(`Restored ${result.restored_version?.version_id || previous.version_id}`, "success");
+    await refreshAfterMutation();
+  } catch (error) { toast(`Undo failed: ${error.message}`, "error"); }
+  finally { state.busy = false; }
+}
+
+async function restoreVersion(checkpoint, versionId = "this version") {
+  if (state.busy || !checkpoint || !confirm(`Restore ${versionId}? Newer saved versions will remain available.`)) return;
+  try {
+    state.busy = true;
+    await api("/api/rollback", { method: "POST", body: JSON.stringify({ checkpoint_id: checkpoint }) });
+    toast(`Restored ${versionId}`, "success");
+    await refreshAfterMutation();
+  } catch (error) { toast(`Restore failed: ${error.message}`, "error"); }
+  finally { state.busy = false; }
+}
+
 function renderHistory() {
-  viewRoot.innerHTML = `<div class="detail-view"><div class="detail-toolbar"><div><div class="eyebrow">IMMUTABLE OPERATIONS</div><h2>History</h2><p>Every edit is checkpointed before mutation and can be rolled back exactly.</p></div></div><div class="timeline">${state.history.length ? state.history.slice().reverse().map((item) => `<article class="timeline-row"><span class="timeline-dot"></span><div><div class="timeline-meta"><span>${escapeHtml(item.name || "checkpoint")}</span><time>${escapeHtml(item.operation_id || "system")}</time></div><h3>${escapeHtml(item.note || item.status || "Operation complete")}</h3><p>${escapeHtml(item.result_checkpoint || item.input_checkpoint || "")}</p></div>${item.input_checkpoint ? `<button class="quiet-button rollback" data-checkpoint="${escapeHtml(item.input_checkpoint)}">Rollback</button>` : ""}</article>`).join("") : `<div class="empty-state"><i class="ph ph-clock-counter-clockwise"></i><h3>No operations yet</h3><p>Edit a part to create the first checkpoint.</p></div>`}</div>`;
-  document.querySelectorAll(".rollback").forEach((button) => button.addEventListener("click", () => rollback(button.dataset.checkpoint)));
+  const historyAssetId = state.selectedAssetId || state.inspect.current.asset_id;
+  const versions = (state.versions?.versions || []).filter((version) => version.asset_id === historyAssetId);
+  const current = versions.find((version) => version.current);
+  const viewingCurrent = historyAssetId === state.inspect.current.asset_id;
+  const versionRows = versions.length ? versions.slice().reverse().map((version) => `<article class="version-row ${version.current ? "current" : ""}"><span class="version-dot"></span><div><div class="timeline-meta"><span>${escapeHtml(version.version_id)}</span><time>${escapeHtml(version.asset_id || "asset")}</time></div><h3>${escapeHtml(version.note || "Saved asset version")}</h3><p>${escapeHtml(version.operation || "asset")}${version.operation_id ? ` · ${escapeHtml(version.operation_id)}` : ""}</p></div><div class="version-row-actions">${version.current ? `<span class="version-current">CURRENT</span>` : `<button class="quiet-button version-restore" data-version-restore="${escapeHtml(version.checkpoint_id)}" data-version-label="${escapeHtml(version.version_id)}" type="button">Restore</button>`}</div></article>`).join("") : `<div class="empty-state"><i class="ph ph-git-branch"></i><h3>No saved versions yet</h3><p>The initial asset version will appear here.</p></div>`;
+  const operations = state.history.length ? state.history.slice().reverse().map((item) => `<article class="timeline-row"><span class="timeline-dot"></span><div><div class="timeline-meta"><span>${escapeHtml(item.name || "checkpoint")}</span><time>${escapeHtml(item.operation_id || "system")}</time></div><h3>${escapeHtml(item.note || item.status || "Operation complete")}</h3><p>${escapeHtml(item.result_checkpoint || item.input_checkpoint || "")}</p></div>${item.input_checkpoint ? `<button class="quiet-button rollback" data-checkpoint="${escapeHtml(item.input_checkpoint)}" type="button">Rollback</button>` : ""}</article>`).join("") : `<div class="empty-state"><i class="ph ph-clock-counter-clockwise"></i><h3>No operations yet</h3><p>Edit a part or run an agent build to create the first operation.</p></div>`;
+  viewRoot.innerHTML = `<div class="detail-view"><div class="detail-toolbar"><div><div class="eyebrow">IMMUTABLE ASSET VERSIONS</div><h2>Versions</h2><p>Every accepted asset state is content-addressed and can be restored without losing the newer version.</p></div><button class="primary-action compact" id="history-undo" type="button" ${viewingCurrent && state.versions?.can_undo ? "" : "disabled"}><i class="ph ph-arrow-u-up-left"></i>Undo latest</button></div><section class="version-history"><div class="version-history-heading"><div><b>${escapeHtml(current?.version_id || "v001")}</b><span>${viewingCurrent ? "current version" : escapeHtml(historyAssetId)}</span></div><span>${versions.length} saved version${versions.length === 1 ? "" : "s"}</span></div><div class="version-list">${versionRows}</div></section><section class="operation-history"><div class="section-heading"><span>OPERATION LOG</span><span>${state.history.length}</span></div><div class="timeline">${operations}</div></section></div>`;
+  document.querySelector("#history-undo")?.addEventListener("click", undoAsset);
+  document.querySelectorAll(".version-restore").forEach((button) => button.addEventListener("click", () => restoreVersion(button.dataset.versionRestore, button.dataset.versionLabel)));
+  document.querySelectorAll(".rollback").forEach((button) => button.addEventListener("click", () => restoreVersion(button.dataset.checkpoint, "checkpoint")));
 }
 
 function renderProviders() {
@@ -985,8 +1050,8 @@ function mountViewer() {
   controls.minAzimuthAngle = -Infinity;
   controls.maxAzimuthAngle = Infinity;
   controls.enablePan = true;
-  controls.minDistance = 0.2;
-  controls.maxDistance = 20;
+  controls.minDistance = 0.02;
+  controls.maxDistance = 1000;
   controls.enabled = state.viewportMode === "orbit";
   scene.add(new THREE.HemisphereLight(0xe5f2e9, 0x161b18, 2.2));
   const key = new THREE.DirectionalLight(0xffffff, 3.3);
@@ -1069,6 +1134,7 @@ async function loadArtifact() {
       toast(`GLB parse failed for ${asset.asset_id}: ${error.message || error}`, "error");
     }
   }
+  updateZoomLimits();
   frameAsset();
   const readout = document.querySelector("#mesh-readout");
   if (readout) readout.textContent = `${meshCount} render meshes · ${viewer.instances.size}/${instances.length} rendered scene instances`;
@@ -1257,6 +1323,19 @@ function highlightPart() {
   });
 }
 
+function updateZoomLimits() {
+  if (!viewer.root || !viewer.controls || !viewer.camera) return;
+  const bounds = new THREE.Box3().setFromObject(viewer.root);
+  if (bounds.isEmpty()) return;
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const radius = Math.max(sphere.radius, 0.1);
+  viewer.controls.minDistance = 0.02;
+  viewer.controls.maxDistance = Math.max(radius * 40, 100);
+  viewer.camera.near = Math.max(radius * 0.0001, 0.001);
+  viewer.camera.far = Math.max(radius * 100, 1000);
+  viewer.camera.updateProjectionMatrix();
+}
+
 function frameAsset() {
   if (!viewer.root) return;
   const bounds = new THREE.Box3().setFromObject(viewer.root); const sphere = bounds.getBoundingSphere(new THREE.Sphere());
@@ -1426,12 +1505,7 @@ async function applyScale() {
   try { state.busy = true; await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: partId, scale_x: values.x, scale_y: values.y, scale_z: values.z }) }); toast(`Scaled ${partId}`, "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); } finally { state.busy = false; }
 }
 
-async function refreshAfterMutation() { const [inspect, report, history, workspace] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = selectedAssetContract()?.parts[0]?.part_id || null; state.selectedParts = []; hydrateHeader(); renderView(); await loadArtifact(); }
-
-async function rollback(checkpoint) {
-  if (!checkpoint || !confirm("Restore this checkpoint?")) return;
-  try { await api("/api/rollback", { method: "POST", body: JSON.stringify({ checkpoint_id: checkpoint }) }); toast("Checkpoint restored", "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); }
-}
+async function refreshAfterMutation() { const [inspect, report, history, workspace, versions] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace"), api("/api/versions")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.versions = versions; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = selectedAssetContract()?.parts[0]?.part_id || null; state.selectedParts = []; hydrateHeader(); renderView(); await loadArtifact(); }
 
 document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", () => { state.activeView = item.dataset.view; renderView(); if (state.activeView === "workspace") loadArtifact(); }));
 document.querySelector("#validate").addEventListener("click", runQa);
@@ -1468,6 +1542,7 @@ document.querySelector("#clear-actions").addEventListener("click", () => { state
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#search").focus(); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); state.agentOpen ? closeAgent() : openAgent(); }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && state.activeView === "workspace" && !state.agentOpen && !state.createOpen && !["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName) && !event.isComposing) { event.preventDefault(); undoAsset(); return; }
   if (nudgeSelectedAsset(event.key, event)) return;
   if (event.key === "Escape") { if (state.createOpen) closeCreateAsset(); else if (state.agentOpen) closeAgent(); }
 });
