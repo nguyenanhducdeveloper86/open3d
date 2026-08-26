@@ -220,7 +220,7 @@ class Project:
         changed = missing
         for index, existing in enumerate(assets):
             if existing.get("asset_id") == current_entry["asset_id"]:
-                if existing.get("glb_artifact") != current_entry["glb_artifact"] or existing.get("qa_artifact") != current_entry.get("qa_artifact"):
+                if existing.get("glb_artifact") != current_entry["glb_artifact"] or existing.get("qa_artifact") != current_entry.get("qa_artifact") or existing.get("blend_artifact") != current_entry.get("blend_artifact"):
                     assets[index] = current_entry
                     changed = True
                 break
@@ -340,7 +340,7 @@ class Project:
     @staticmethod
     def _version_signature(ref: dict[str, Any]) -> tuple[Any, ...]:
         # QA reports are refreshable metadata; a validation run must not create a new asset version.
-        return tuple(ref.get(key) for key in ("asset_id", "contract_artifact", "glb_artifact", "blend_artifact"))
+        return tuple(ref.get(key) for key in ("asset_id", "contract_artifact", "glb_artifact"))
 
     def _checkpoint_records(self) -> dict[str, dict[str, Any]]:
         records: dict[str, dict[str, Any]] = {}
