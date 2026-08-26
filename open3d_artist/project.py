@@ -160,6 +160,7 @@ class Project:
             "contract_artifact": ref["contract_artifact"],
             "glb_artifact": ref["glb_artifact"],
             "qa_artifact": ref.get("qa_artifact"),
+            "blend_artifact": ref.get("blend_artifact"),
             "qa_status": ref.get("qa_status", "UNKNOWN"),
             "geometry_source": ref.get("geometry_source", "contract"),
             "agent_build": ref.get("agent_build"),
