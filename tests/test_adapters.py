@@ -56,6 +56,8 @@ class AdapterTest(unittest.TestCase):
                 command = sandbox.build_command({"operation": "inspect", "input_blend": "scene.blend"}, input_dir=Path(inputs), output_dir=Path(outputs), sandboxed=False)
                 self.assertIn("--disable-autoexec", command)
                 self.assertIn("--factory-startup", command)
+                if sys.platform == "darwin":
+                    self.assertEqual(command[command.index("--gpu-backend") + 1], "metal")
             unity_root = root / "unity"
             (unity_root / "Assets").mkdir(parents=True)
             (unity_root / "Assets/model.glb").write_bytes(project.store.read_bytes(project.current()["glb_artifact"]))

@@ -8,6 +8,7 @@ import selectors
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -135,6 +136,13 @@ class BlenderSandbox:
             return candidate
         raise WorkerUnavailable(f"Blender executable not found: {self.blender}")
 
+    @staticmethod
+    def _blender_flags() -> list[str]:
+        flags = ["--background", "--factory-startup", "--disable-autoexec"]
+        if sys.platform == "darwin":
+            flags.extend(["--gpu-backend", "metal"])
+        return flags
+
     def _job_paths(self, job: dict[str, Any]) -> tuple[str, Path | None]:
         if not isinstance(job, dict) or set(job) - {"schema_version", "operation", "input_blend"}:
             raise ProjectError("Blender job contains unsupported fields")
@@ -178,7 +186,7 @@ class BlenderSandbox:
                 "--tmpfs", "/tmp",
                 "--chdir", "/project",
                 str(blender_path),
-                "--background", "--factory-startup", "--disable-autoexec",
+                *self._blender_flags(),
                 "--python", "/worker/blender_worker.py",
                 "--job", "/input/job.json", "--result", "/output/result.json",
             ])
@@ -188,7 +196,7 @@ class BlenderSandbox:
             command = [
                 self.sandbox_exec, "-p", profile,
                 str(blender_path),
-                "--background", "--factory-startup", "--disable-autoexec",
+                *self._blender_flags(),
                 "--python", str(self.worker_script),
                 "--job", str(job_file), "--result", str(result_file),
             ]
@@ -196,7 +204,7 @@ class BlenderSandbox:
             job_value = {"schema_version": "0.1.0", "operation": operation, "input_blend": str(input_blend), "output_glb": str(output_glb)}
             command = [
                 str(blender_path),
-                "--background", "--factory-startup", "--disable-autoexec",
+                *self._blender_flags(),
                 "--python", str(self.worker_script),
                 "--job", str(job_file), "--result", str(result_file),
             ]
@@ -261,12 +269,12 @@ class BlenderSandbox:
             for runtime_path in (Path("/usr"), Path("/lib"), Path("/lib64"), Path("/bin"), Path("/etc"), Path("/opt")):
                 if runtime_path.exists():
                     command.extend(["--ro-bind", str(runtime_path), str(runtime_path)])
-            command.extend(["--ro-bind", str(self.root), "/project", "--bind", str(output), "/output", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project", str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec", "--python", "/project/tools/production_fixture/generate_fixture.py", "--", "--recipe", recipe_arg, "--output", output_arg])
+            command.extend(["--ro-bind", str(self.root), "/project", "--bind", str(output), "/output", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project", str(self._blender_path()), *self._blender_flags(), "--python", "/project/tools/production_fixture/generate_fixture.py", "--", "--recipe", recipe_arg, "--output", output_arg])
             if repair_id is not None:
                 command.extend(["--repair-id", repair_id])
         else:
             profile = self._macos_profile(recipe.parent, output)
-            command = [self.sandbox_exec, "-p", profile, str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec", "--python", str(self.root / "tools/production_fixture/generate_fixture.py"), "--", "--recipe", str(recipe), "--output", str(output)]
+            command = [self.sandbox_exec, "-p", profile, str(self._blender_path()), *self._blender_flags(), "--python", str(self.root / "tools/production_fixture/generate_fixture.py"), "--", "--recipe", str(recipe), "--output", str(output)]
             if repair_id is not None:
                 command.extend(["--repair-id", repair_id])
         result = run_limited(command, cwd=self.root, timeout=timeout, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output), "TMPDIR": "/tmp", "LANG": "C.UTF-8"})
@@ -298,19 +306,19 @@ class BlenderSandbox:
             command.extend([
                 "--ro-bind", str(self.root), "/project", "--bind", str(output_path), "/output",
                 "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project",
-                str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec",
+                str(self._blender_path()), *self._blender_flags(),
                 "--python", script_arg, "--", "--contract", contract_arg, "--output", "/output",
             ])
         elif sandbox_kind == "macos-sandbox":
             profile = self._macos_profile(script_path.parent, output_path)
             command = [
                 self.sandbox_exec, "-p", profile, str(self._blender_path()),
-                "--background", "--factory-startup", "--disable-autoexec", "--python", str(script_path),
+                *self._blender_flags(), "--python", str(script_path),
                 "--", "--contract", str(contract_path), "--output", str(output_path),
             ]
         else:
             command = [
-                str(self._blender_path()), "--background", "--factory-startup", "--disable-autoexec",
+                str(self._blender_path()), *self._blender_flags(),
                 "--python", str(script_path), "--", "--contract", str(contract_path), "--output", str(output_path),
             ]
         clean_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output_path), "TMPDIR": "/tmp", "LANG": "C.UTF-8"}
