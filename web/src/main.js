@@ -71,7 +71,7 @@ app.innerHTML = `
       <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>OPEN3D RUNTIME</span><b id="runtime-status-value">CHECKING</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
     </aside>
     <main class="main-shell">
-      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create 3D asset</span></button><button class="top-action agent-trigger" id="open-agent"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
+      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create 3D asset</span></button><button class="top-action agent-trigger" id="open-agent" aria-controls="agent-drawer" aria-expanded="false"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
       <section class="content-shell">
         <div class="content-heading"><div><div class="eyebrow">OPEN3D / LIVE ARTIFACT</div><h1 id="asset-title">Loading asset</h1><p id="asset-subtitle">Preparing the contract and GLB preview</p></div><div class="heading-meta"><span class="status-badge" id="qa-status"><span></span>Checking</span><span class="artifact-id" id="artifact-id">sha256:...</span></div></div>
         <div id="view-root"></div>
@@ -102,9 +102,10 @@ app.innerHTML = `
         <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="quiet-button" type="submit"><i class="ph ph-floppy-disk"></i>Save draft</button><button class="primary-action compact" type="button" id="create-generate"><i class="ph ph-sparkle"></i>Generate 3D asset</button></footer>
       </form>
     </div>
-    <div class="agent-backdrop" id="agent-backdrop"></div>
-    <aside class="agent-drawer" id="agent-drawer" aria-hidden="true" aria-labelledby="agent-title">
-      <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" aria-label="Close agent chat"><i class="ph ph-x"></i></button></header>
+    <div class="agent-backdrop" id="agent-backdrop" aria-hidden="true"></div>
+    <aside class="agent-drawer" id="agent-drawer" aria-hidden="false" aria-labelledby="agent-title">
+      <button class="agent-rail-tab" id="agent-rail-tab" type="button" aria-label="Open agent chat"><i class="ph ph-sparkle"></i><span>Agent</span></button>
+      <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" type="button" aria-label="Collapse agent chat" title="Collapse agent chat"><i class="ph ph-caret-right"></i></button></header>
       <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Codex, Claude Code, and OpenCode author the staged build. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass. No local agent fallback.</span></div>
       <section class="build-state" id="agent-build-state" hidden aria-live="polite"><div class="build-state-header"><span class="build-state-pulse"></span><div><b>BUILD IN PROGRESS</b><small id="build-state-detail">External LLM is authoring the staged build</small></div><time id="build-state-elapsed">00:00</time></div><div class="build-progress" aria-hidden="true"><span></span></div><p><i class="ph ph-lock-key"></i>Request locked. Keep this window open or close it safely; the build continues and duplicate runs are blocked.</p></section>
       <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
@@ -524,8 +525,10 @@ function renderAgentThread() {
 function openAgent() {
   state.agentOpen = true;
   const drawer = document.querySelector("#agent-drawer");
+  shell.classList.add("agent-is-open");
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
+  document.querySelector("#open-agent")?.setAttribute("aria-expanded", "true");
   document.querySelector("#agent-backdrop").classList.add("is-open");
   renderAgentProviderStatus();
   renderAgentActivity();
@@ -536,8 +539,10 @@ function openAgent() {
 
 function closeAgent() {
   state.agentOpen = false;
+  shell.classList.remove("agent-is-open");
   document.querySelector("#agent-drawer").classList.remove("is-open");
-  document.querySelector("#agent-drawer").setAttribute("aria-hidden", "true");
+  document.querySelector("#agent-drawer").setAttribute("aria-hidden", "false");
+  document.querySelector("#open-agent")?.setAttribute("aria-expanded", "false");
   document.querySelector("#agent-backdrop").classList.remove("is-open");
   renderBuildStatus();
 }
@@ -1525,6 +1530,7 @@ document.querySelector("#create-cancel").addEventListener("click", closeCreateAs
 document.querySelector("[data-close-create]").addEventListener("click", closeCreateAsset);
 document.querySelector("#open-agent").addEventListener("click", openAgent);
 document.querySelector("#reopen-build").addEventListener("click", openAgent);
+document.querySelector("#agent-rail-tab").addEventListener("click", openAgent);
 document.querySelector("#close-agent").addEventListener("click", closeAgent);
 document.querySelector("#agent-backdrop").addEventListener("click", closeAgent);
 document.querySelector("#agent-form").addEventListener("submit", submitAgentMessage);
