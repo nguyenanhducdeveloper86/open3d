@@ -30,6 +30,8 @@ const state = {
   selectedAssetId: null,
   selectedInstanceId: null,
   selectedPart: null,
+  selectedParts: [],
+  inspectorTab: "inspector",
   viewportMode: "orbit",
   scenePlaceMode: false,
   pendingSpawn: null,
@@ -65,10 +67,10 @@ app.innerHTML = `
         <div class="section-label"><span>PROJECT FILES</span><button class="section-action" id="quick-create" aria-label="Create asset"><i class="ph ph-plus"></i></button></div>
         <div class="file-tree"><div class="tree-row folder"><i class="ph ph-folder-open"></i><span>Assets</span></div><div class="tree-row selected"><i class="ph ph-cube"></i><span id="asset-file">asset.yaml</span><span class="tree-status"></span></div><div class="tree-row"><i class="ph ph-file-text"></i><span>QA report</span></div></div>
       </div>
-      <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>OPEN3D RUNTIME</span><b>READY</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
+      <div class="sidebar-footer"><div class="runtime-status"><span class="status-pulse"></span><span>OPEN3D RUNTIME</span><b id="runtime-status-value">CHECKING</b></div><div class="footer-links"><span>v0.1 alpha</span><a href="https://github.com/nguyenanhducdeveloper86/open3d" target="_blank" rel="noreferrer">GitHub <i class="ph ph-arrow-up-right"></i></a></div></div>
     </aside>
     <main class="main-shell">
-      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create asset</span></button><button class="top-action agent-trigger" id="open-agent"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
+      <header class="topbar"><div class="crumbs"><span>Projects</span><i class="ph ph-caret-right"></i><strong id="breadcrumb-name">Open3D asset</strong></div><label class="search-box"><i class="ph ph-magnifying-glass"></i><input id="search" type="search" placeholder="Search parts, checks, providers" /><kbd>⌘ K</kbd></label><div class="top-actions"><button class="top-action create-trigger" id="create-asset"><i class="ph ph-plus"></i><span>Create 3D asset</span></button><button class="top-action agent-trigger" id="open-agent"><i class="ph ph-sparkle"></i><span>Agent</span></button><button class="validate-button" id="validate"><i class="ph ph-shield-check"></i><span>Run QA</span></button><div class="avatar">DA</div></div></header>
       <section class="content-shell">
         <div class="content-heading"><div><div class="eyebrow">OPEN3D / LIVE ARTIFACT</div><h1 id="asset-title">Loading asset</h1><p id="asset-subtitle">Preparing the contract and GLB preview</p></div><div class="heading-meta"><span class="status-badge" id="qa-status"><span></span>Checking</span><span class="artifact-id" id="artifact-id">sha256:...</span></div></div>
         <div id="view-root"></div>
@@ -77,16 +79,26 @@ app.innerHTML = `
     <div class="modal-layer" id="create-layer" hidden>
       <div class="modal-backdrop" data-close-create></div>
       <form class="create-modal" id="create-form" aria-labelledby="create-title">
-        <header class="modal-header"><div><div class="eyebrow">CREATE ASSET</div><h2 id="create-title">Start from a production brief</h2><p>Save the prompt and reference boundary before a recipe or provider runs.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
-        <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH / NOTE</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local path or note" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
-        <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="6">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea></label>
-        <div class="placement-note" id="create-placement"><i class="ph ph-map-pin"></i><span>Generated asset will be added to the Asset Library.</span></div>
-        <div class="reference-upload"><label class="reference-drop" for="create-reference-file"><input id="create-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /><i class="ph ph-image-square"></i><span id="reference-file-label">Attach reference image</span><small>PNG, JPG, or WebP · compressed before upload</small></label><div class="reference-preview" id="reference-preview" hidden><img id="reference-preview-image" alt="Reference preview" /><div><b id="reference-preview-name"></b><small id="reference-preview-size"></small></div><button class="icon-button" type="button" id="reference-remove" aria-label="Remove reference image"><i class="ph ph-x"></i></button></div></div>
-        <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
-        <div class="form-boundary"><i class="ph ph-info"></i><p>The selected external LLM will inspect the prompt and optional reference, author <code>asset.json</code> + <code>build.py</code>, then Open3D runs Blender and QA before adoption.</p></div>
-        <div class="brief-agent"><label><span>BUILD AGENT</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div>
+        <header class="modal-header"><div><div class="eyebrow">CREATE 3D ASSET</div><h2 id="create-title">Describe what should exist</h2><p>Give an external LLM the brief and reference. It writes the Blender build, then Open3D runs it, validates the GLB, and adds the asset to this project.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
+        <div class="create-layout">
+          <div class="create-form-column">
+            <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH / NOTE</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local path or note" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
+            <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="9">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea><small class="field-hint">Describe shape, materials, proportions, semantic parts, and game-ready constraints.</small></label>
+            <div class="placement-note" id="create-placement"><i class="ph ph-map-pin"></i><span>Generated asset will be added to the Asset Library and placed at the scene origin.</span></div>
+            <div class="reference-upload"><label class="reference-drop" for="create-reference-file"><input id="create-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /><i class="ph ph-image-square"></i><span id="reference-file-label">Attach reference image</span><small>PNG, JPG, or WebP · compressed before upload</small></label><div class="reference-preview" id="reference-preview" hidden><img id="reference-preview-image" alt="Reference preview" /><div><b id="reference-preview-name"></b><small id="reference-preview-size"></small></div><button class="icon-button" type="button" id="reference-remove" aria-label="Remove reference image"><i class="ph ph-x"></i></button></div></div>
+          </div>
+          <aside class="create-preview" aria-label="Asset build plan">
+            <div class="create-preview-header"><span>LIVE BUILD PLAN</span><b id="create-summary-state">READY</b></div>
+            <div class="create-preview-asset"><small>ASSET ID</small><strong id="create-preview-id">PROP-SCANDI-HOUSE-001</strong></div>
+            <div class="create-preview-prompt"><small>PROMPT PREVIEW</small><p id="create-preview-prompt">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</p><small>REFERENCE</small><p id="create-preview-reference">${escapeHtml(state.assetDraft?.reference?.path || "No reference attached")}</p></div>
+            <ol class="create-flow" aria-label="Build pipeline"><li class="done"><span>01</span><div><b>Brief</b><small>Prompt + reference</small></div></li><li><span>02</span><div><b>External LLM</b><small id="create-preview-agent">Codex</small></div></li><li><span>03</span><div><b>Blender build</b><small>Author, run, export GLB</small></div></li><li><span>04</span><div><b>QA gate</b><small>Contract + six views</small></div></li></ol>
+            <div class="create-agent-card"><div class="create-card-label">WHO BUILDS IT</div><div class="brief-agent"><label><span>EXTERNAL LLM</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div></div>
+            <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
+            <div class="form-boundary"><i class="ph ph-shield-check"></i><p>Only an authenticated external agent can start this build. Open3D never uses a local agent fallback.</p></div>
+          </aside>
+        </div>
         <p class="form-status" id="create-status" aria-live="polite"></p>
-        <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="quiet-button" type="submit"><i class="ph ph-floppy-disk"></i>Save brief</button><button class="primary-action compact" type="button" id="create-generate"><i class="ph ph-sparkle"></i>Generate asset</button></footer>
+        <footer class="modal-actions"><button class="quiet-button" type="button" id="create-cancel">Cancel</button><button class="quiet-button" type="submit"><i class="ph ph-floppy-disk"></i>Save draft</button><button class="primary-action compact" type="button" id="create-generate"><i class="ph ph-sparkle"></i>Generate 3D asset</button></footer>
       </form>
     </div>
     <div class="agent-backdrop" id="agent-backdrop"></div>
@@ -115,6 +127,11 @@ function toast(message, tone = "neutral") {
   node.innerHTML = `<i class="ph ${tone === "error" ? "ph-warning-circle" : tone === "success" ? "ph-check-circle" : "ph-info"}"></i><span>${escapeHtml(message)}</span>`;
   toastRegion.append(node);
   setTimeout(() => node.remove(), 3600);
+}
+
+function setRuntimeStatus(status) {
+  const node = document.querySelector("#runtime-status-value");
+  if (node) node.textContent = status;
 }
 
 function escapeHtml(value) {
@@ -183,6 +200,7 @@ function renderBuildStatus() {
     const control = document.querySelector(selector);
     if (control) control.disabled = running;
   });
+  renderCreateSummary();
 }
 
 function startBuildStatus(agent) {
@@ -261,6 +279,7 @@ function renderReferenceImage() {
     attachment.hidden = !image;
     attachmentName.textContent = image ? `Reference · ${image.name}` : "";
   }
+  renderCreateSummary();
 }
 
 function readDataUrl(file) {
@@ -313,8 +332,10 @@ async function attachReferenceImage(event) {
 
 function removeReferenceImage() {
   state.referenceImage = null;
-  const input = document.querySelector("#create-reference-file");
-  if (input) input.value = "";
+  ["#create-reference-file", "#agent-reference-file"].forEach((selector) => {
+    const input = document.querySelector(selector);
+    if (input) input.value = "";
+  });
   renderReferenceImage();
 }
 
@@ -323,6 +344,44 @@ function readBriefForm() {
   const prompt = document.querySelector("#create-prompt").value.trim();
   const referencePath = document.querySelector("#create-reference").value.trim();
   return { id, prompt, referencePath };
+}
+
+function setInspectorTab(tab) {
+  if (!['inspector', 'contract'].includes(tab)) return;
+  state.inspectorTab = tab;
+  document.querySelectorAll('[data-inspector-tab]').forEach((button) => {
+    const active = button.dataset.inspectorTab === tab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  document.querySelector('#inspector-pane')?.toggleAttribute('hidden', tab !== 'inspector');
+  document.querySelector('#contract-pane')?.toggleAttribute('hidden', tab !== 'contract');
+}
+
+function renderCreateSummary() {
+  const id = document.querySelector("#create-id")?.value.trim().toUpperCase() || "PROP-SCANDI-HOUSE-001";
+  const prompt = document.querySelector("#create-prompt")?.value.trim() || "Add a production brief to preview the build.";
+  const agent = state.agents.find((item) => item.agent_id === state.agentProvider);
+  const running = state.build.status === "running";
+  const ready = agent?.status === "ACTIVE";
+  const status = running ? "BUILD RUNNING" : ready ? "READY TO BUILD" : agent?.status === "CHECKING" ? "CHECKING AGENT" : "AUTH REQUIRED";
+  const reference = document.querySelector("#create-reference")?.value.trim();
+  const idNode = document.querySelector("#create-preview-id");
+  const promptNode = document.querySelector("#create-preview-prompt");
+  const agentNode = document.querySelector("#create-preview-agent");
+  const statusNode = document.querySelector("#create-summary-state");
+  const referenceNode = document.querySelector("#create-preview-reference");
+  if (idNode) idNode.textContent = id;
+  if (promptNode) promptNode.textContent = prompt;
+  if (agentNode) agentNode.textContent = agent?.label || state.agentProvider;
+  if (referenceNode) referenceNode.textContent = reference || (state.referenceImage ? `Attached image · ${state.referenceImage.name}` : "No reference attached");
+  if (statusNode) {
+    statusNode.textContent = status;
+    statusNode.className = running ? "running" : ready ? "ready" : "blocked";
+  }
+  document.querySelectorAll(".create-flow li").forEach((step, index) => step.classList.toggle("active", running && index === 1));
+  const generate = document.querySelector("#create-generate");
+  if (generate) generate.disabled = running || !ready;
 }
 
 function saveBriefState(brief, generation = "draft-only") {
@@ -342,6 +401,7 @@ function syncCreateAgent() {
   const agent = state.agents.find((item) => item.agent_id === state.agentProvider) || { status: "CHECKING", reason: "CHECKING" };
   status.className = `agent-provider-status ${agent.status.toLowerCase()}`;
   status.textContent = agent.status === "ACTIVE" ? "ACTIVE" : agent.reason || agent.status;
+  renderCreateSummary();
 }
 
 function openCreateAsset(spawnPosition = null) {
@@ -356,6 +416,7 @@ function openCreateAsset(spawnPosition = null) {
     : `<i class="ph ph-books"></i><span>Generated asset will be added to the Asset Library and placed at the scene origin.</span>`;
   syncCreateAgent();
   renderReferenceImage();
+  renderCreateSummary();
   document.querySelector("#create-id").focus();
 }
 
@@ -377,8 +438,12 @@ function saveAssetDraft(event) {
   openAgent();
 }
 
-function selectedContractPart(partId = state.selectedPart) {
-  return selectedAssetContract()?.parts.find((part) => part.part_id.toLowerCase() === String(partId || "").toLowerCase());
+function contractForAsset(assetId = state.selectedAssetId) {
+  return state.workspace?.assets.find((asset) => asset.asset_id === assetId)?.contract || (assetId === state.inspect?.current?.asset_id ? state.inspect?.contract : null);
+}
+
+function selectedContractPart(partId = state.selectedPart, assetId = state.selectedAssetId) {
+  return contractForAsset(assetId)?.parts.find((part) => part.part_id.toLowerCase() === String(partId || "").toLowerCase());
 }
 
 function selectedWorkspaceAsset() {
@@ -386,16 +451,36 @@ function selectedWorkspaceAsset() {
 }
 
 function selectedAssetContract() {
-  return selectedWorkspaceAsset()?.contract || state.inspect?.contract;
+  return contractForAsset();
 }
 
 function selectedAssetInstances(assetId = state.selectedAssetId) {
   return (state.workspace?.scene?.instances || []).filter((instance) => instance.asset_id === assetId);
 }
 
+function instanceTransformKey(instance) {
+  return JSON.stringify([instance.position, instance.rotation, instance.scale]);
+}
+
+function selectionKey(selection) {
+  return `${selection.assetId || ""}::${selection.instanceId || ""}::${selection.partId}`;
+}
+
+function selectedPartDescriptors() {
+  if (state.selectedParts.length) return state.selectedParts;
+  const part = selectedContractPart();
+  return part ? [{ assetId: state.selectedAssetId, instanceId: state.selectedInstanceId, partId: part.part_id, role: part.role || "semantic part" }] : [];
+}
+
+function isPartSelected(partId, assetId = state.selectedAssetId, instanceId = state.selectedInstanceId) {
+  return selectedPartDescriptors().some((selection) => selection.partId === partId && selection.assetId === assetId && selection.instanceId === instanceId);
+}
+
 function selectedAgentTarget() {
-  const part = state.annotation?.partId ? selectedContractPart(state.annotation.partId) : selectedContractPart();
-  return part ? { partId: part.part_id, role: part.role || "semantic part" } : null;
+  const selections = state.annotation?.partId
+    ? [{ assetId: state.annotation.assetId || state.selectedAssetId, instanceId: state.annotation.instanceId || state.selectedInstanceId, partId: state.annotation.partId, role: selectedContractPart(state.annotation.partId, state.annotation.assetId || state.selectedAssetId)?.role || "semantic part" }]
+    : selectedPartDescriptors();
+  return selections.length ? { parts: selections, partId: selections[0].partId, role: selections[0].role } : null;
 }
 
 function renderAgentTarget() {
@@ -405,9 +490,10 @@ function renderAgentTarget() {
   const context = document.querySelector("#agent-context");
   const note = document.querySelector("#agent-composer-note");
   const input = document.querySelector("#agent-input");
-  if (context) context.textContent = target ? `${asset?.asset_id || "Asset"} · ${target.partId} · ${target.role}${marked}` : state.annotation ? `${asset?.asset_id || "Asset"} · marked viewport area` : `${asset?.asset_id || "Asset"} · select a part or mark an area to target the agent.`;
-  if (note) note.textContent = target ? `Target ${target.partId}${marked} · LLM → Blender → QA` : state.annotation ? "Marked area · LLM → Blender → QA" : "Whole asset · LLM → Blender → QA";
-  if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${target.partId}` : state.annotation ? "Describe what is wrong in the marked area" : "Try: build a production-quality Scandinavian timber house";
+  const targetLabel = target?.parts?.map((part) => part.partId).join(" + ");
+  if (context) context.textContent = target ? `${asset?.asset_id || "Asset"} · ${targetLabel}${marked}` : state.annotation ? `${asset?.asset_id || "Asset"} · marked viewport area` : `${asset?.asset_id || "Asset"} · select a subject component or mark an area.`;
+  if (note) note.textContent = target ? `Target ${targetLabel}${marked} · LLM → Blender → QA` : state.annotation ? "Marked area · LLM → Blender → QA" : "Whole asset · LLM → Blender → QA";
+  if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${targetLabel}` : state.annotation ? "Describe what is wrong in the marked area" : "Try: build a production-quality Scandinavian timber house";
 }
 
 function addAgentMessage(role, text, patch = null) {
@@ -465,10 +551,12 @@ async function executeAgentBuild(text, options = {}) {
   const label = provider?.label || state.agentProvider;
   const target = options.create ? null : selectedAgentTarget();
   const markedContext = !options.create && state.annotation ? `Marked viewport area: x=${state.annotation.x.toFixed(3)}, y=${state.annotation.y.toFixed(3)}, width=${state.annotation.width.toFixed(3)}, height=${state.annotation.height.toFixed(3)} in normalized viewport coordinates. A cropped viewport reference is attached.` : "";
+  const targetParts = target?.parts?.map((part) => `- ${part.partId} (${part.role})`).join("\n");
+  const referenceNote = options.referencePath ? `Reference path/note supplied by the user: ${options.referencePath}` : "";
   const requestPrompt = target
-    ? [`Target semantic part: ${target.partId}`, `Target role: ${target.role}`, markedContext, "Edit scope: modify this part only; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].filter(Boolean).join("\n")
-    : [markedContext, text].filter(Boolean).join("\n");
-  const messageTarget = target ? `Target: ${target.partId} · ${target.role}` : state.annotation ? "Target: marked viewport area" : "";
+    ? [`Target semantic parts:\n${targetParts}`, markedContext, referenceNote, "Edit scope: modify only these selected parts; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].filter(Boolean).join("\n")
+    : [referenceNote, markedContext, text].filter(Boolean).join("\n");
+  const messageTarget = target ? `Targets: ${target.parts.map((part) => part.partId).join(" + ")}` : state.annotation ? "Target: marked viewport area" : "";
   const messageText = messageTarget ? `${messageTarget}\n\n${text}` : text;
   if (provider?.status !== "ACTIVE") {
     addAgentMessage("user", messageText);
@@ -528,7 +616,7 @@ async function generateAssetFromBrief() {
   saveBriefState(brief, "generation-requested");
   closeCreateAsset();
   openAgent();
-  await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, spawn });
+  await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, spawn, referencePath: brief.referencePath });
 }
 
 async function applyAgentPatch(index) {
@@ -592,6 +680,7 @@ async function loadState() {
     state.selectedAssetId = inspect.current.asset_id;
     state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null;
     state.selectedPart = inspect.contract.parts[0]?.part_id || null;
+    setRuntimeStatus("READY");
     hydrateHeader();
     renderView();
     renderAgentProviderStatus();
@@ -605,6 +694,7 @@ async function loadState() {
 
 function renderConnectionError(error) {
   disposeViewer();
+  setRuntimeStatus("OFFLINE");
   document.querySelector("#project-name").textContent = "Offline workspace";
   document.querySelector("#breadcrumb-name").textContent = "Connection required";
   document.querySelector("#asset-title").textContent = "Workspace offline";
@@ -638,6 +728,7 @@ function setQaBadge(status) {
 
 function renderView() {
   disposeViewer();
+  document.querySelector(".content-shell")?.classList.toggle("is-editing", state.activeView === "workspace");
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === state.activeView));
   if (state.activeView === "qa") return renderQa();
   if (state.activeView === "history") return renderHistory();
@@ -651,18 +742,37 @@ function renderWorkspace() {
   const assets = state.workspace?.assets || [asset];
   const query = state.query.toLowerCase();
   const parts = contract.parts.filter((part) => `${part.part_id} ${part.role}`.toLowerCase().includes(query));
-  viewRoot.innerHTML = `<div class="workspace-grid"><aside class="asset-library-panel"><div class="library-header"><div><div class="eyebrow">PROJECT ASSETS</div><h2>Asset Library</h2><span>${assets.length} asset${assets.length === 1 ? "" : "s"} · ${state.workspace?.scene?.instances?.length || 0} instances</span></div><button class="icon-button" id="library-generate" title="Generate a new asset" aria-label="Generate a new asset"><i class="ph ph-plus"></i></button></div><div class="library-hint"><i class="ph ph-hand-pointing"></i><span>Drag an asset into the scene, or choose Generate here to place a new one.</span></div><div class="asset-library-list">${assets.map((item) => assetLibraryCard(item)).join("")}</div></aside><section class="stage-panel"><div class="stage-toolbar"><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit 360"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="grab-tool" title="Grab and rotate selected asset"><i class="ph ph-hand-grabbing"></i><span>Grab</span></button><button class="tool-button" id="annotate-tool" title="Mark an area to comment with the agent"><i class="ph ph-pencil-simple"></i><span>Mark area</span></button><button class="tool-button" id="generate-here-tool" title="Click a position to generate an asset"><i class="ph ph-map-pin-plus"></i><span>Generate here</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame scene" aria-label="Frame scene"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div><div class="stage-readout"><span class="live-dot"></span>SCENE / ${assets.length} ASSETS</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part</span><span>Drag orbit</span><span>Drop asset</span><span>Wheel zoom</span></div><div class="viewport-annotation-layer" id="annotation-layer" aria-hidden="true"><div class="annotation-box" id="annotation-box" hidden><span>MARKED AREA</span></div><div class="annotation-actions" id="annotation-actions" hidden><span id="annotation-label">Area marked</span><button class="quiet-button" id="annotation-comment" type="button"><i class="ph ph-chat-circle-text"></i>Comment</button><button class="icon-button" id="annotation-clear" type="button" aria-label="Clear marked area"><i class="ph ph-x"></i></button></div></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading scene</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section><aside class="inspector-panel"><div class="inspector-tabs"><button class="inspector-tab active">Inspector</button><button class="inspector-tab">Contract</button></div><div class="inspector-scroll"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTED PART</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SEMANTIC PARTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-list" id="part-list">${parts.map((part) => partRow(part)).join("")}</div></section><section class="panel-section"><div class="section-heading"><span>CONTRACT SNAPSHOT</span><i class="ph ph-lock-key"></i></div><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${asset.asset_id === state.inspect.current.asset_id ? state.report.metrics?.triangles ?? "-" : "-"}</b></div></div></section></div></aside></div>`;
+  const selectedCount = selectedPartDescriptors().length;
+  const qaStatus = asset.qa_status || (asset.asset_id === state.inspect.current.asset_id ? state.report.status : "UNVERIFIED");
+  viewRoot.innerHTML = `
+    <div class="workspace-shell">
+      <div class="workspace-topline">
+        <div class="workspace-context"><div class="eyebrow">EDIT WORKSPACE</div><div class="workspace-title-row"><h1>${escapeHtml(asset.name || asset.asset_id)}</h1><span class="workspace-status ${String(qaStatus).toLowerCase()}"><i class="ph ph-check-circle"></i>${escapeHtml(qaStatus)}</span></div><p><span id="workspace-selection-copy">${selectedCount ? `${selectedCount} subject${selectedCount === 1 ? "" : "s"} selected` : "Select a subject component to edit or comment"}</span> · Shift-click adds subjects to one agent request</p></div>
+        <div class="workspace-actions"><button class="top-action" id="workspace-agent"><i class="ph ph-sparkle"></i><span>Open agent</span></button><button class="primary-action compact" id="workspace-generate"><i class="ph ph-plus"></i> Create 3D asset</button></div>
+      </div>
+      <div class="workspace-grid">
+        <aside class="asset-library-panel"><div class="library-header"><div><div class="eyebrow">SCENE LIBRARY</div><h2>Assets</h2><span>${assets.length} asset${assets.length === 1 ? "" : "s"} · ${state.workspace?.scene?.instances?.length || 0} instance${(state.workspace?.scene?.instances?.length || 0) === 1 ? "" : "s"}</span></div><button class="icon-button" id="library-generate" title="Create a 3D asset" aria-label="Create a 3D asset"><i class="ph ph-plus"></i></button></div><div class="library-hint"><i class="ph ph-hand-pointing"></i><span>Drag to place · click to inspect · + to add another instance</span></div><div class="asset-library-list">${assets.map((item) => assetLibraryCard(item)).join("")}</div></aside>
+        <section class="stage-panel"><div class="stage-toolbar"><div class="stage-toolbar-left"><div class="stage-tool-copy"><b>3D CANVAS</b><small>Orbit · transform · zoom</small></div><div class="toolbar-group"><button class="tool-button active" id="orbit-tool" title="Orbit 360"><i class="ph ph-cursor"></i><span>Orbit</span></button><button class="tool-button" id="grab-tool" title="Transform selected asset with drag and keyboard"><i class="ph ph-hand-grabbing"></i><span>Transform</span></button><button class="tool-button" id="annotate-tool" title="Mark an area to comment with the agent"><i class="ph ph-pencil-simple"></i><span>Mark area</span></button><button class="tool-button" id="generate-here-tool" title="Click a position to generate an asset"><i class="ph ph-map-pin-plus"></i><span>Place asset</span></button><button class="tool-button" id="focus-part-tool" title="Focus selected part" aria-label="Focus selected part"><i class="ph ph-crosshair"></i></button><button class="tool-button" id="frame-tool" title="Frame scene" aria-label="Frame scene"><i class="ph ph-frame-corners"></i></button><button class="tool-button" id="zoom-out-tool" title="Zoom out" aria-label="Zoom out"><i class="ph ph-minus"></i></button><button class="tool-button" id="zoom-in-tool" title="Zoom in" aria-label="Zoom in"><i class="ph ph-plus"></i></button><button class="tool-button" id="grid-tool" title="Toggle grid" aria-label="Toggle grid"><i class="ph ph-grid-four"></i></button></div></div><div class="stage-readout"><span class="live-dot"></span>SCENE / ${assets.length} ASSET${assets.length === 1 ? "" : "S"}</div></div><div class="viewport" id="viewport"><div class="viewport-hint"><span>Click part to select</span><span>Shift-click multi-select</span><span>Drag orbit · wheel zoom</span><span>Drop asset to place</span></div><div class="transform-hud" id="transform-hud" hidden><div class="transform-hud-head"><div><span>TRANSFORM MODE</span><b id="transform-target">Select an asset</b></div><span class="transform-save-status" id="transform-save-status">Saved</span></div><div class="transform-values"><span>POS <b id="transform-position">0.00, 0.00, 0.00</b></span><span>ROT <b id="transform-rotation">0°, 0°, 0°</b></span></div><div class="transform-keys"><span><kbd>← ↑ ↓ →</kbd> move</span><span><kbd>R / F</kbd> height</span><span><kbd>Q / E</kbd> turn</span><span><kbd>Shift</kbd> ×5 · <kbd>Alt</kbd> fine</span></div></div><div class="viewport-annotation-layer" id="annotation-layer" aria-hidden="true"><div class="annotation-box" id="annotation-box" hidden><span>MARKED AREA</span></div><div class="annotation-actions" id="annotation-actions" hidden><span id="annotation-label">Area marked</span><button class="quiet-button" id="annotation-comment" type="button"><i class="ph ph-chat-circle-text"></i>Comment</button><button class="icon-button" id="annotation-clear" type="button" aria-label="Clear marked area"><i class="ph ph-x"></i></button></div></div><div class="viewport-crosshair"><i class="ph ph-crosshair"></i></div></div><div class="stage-footer"><span><i class="ph ph-cube"></i>${escapeHtml(contract.asset_id)}</span><span id="mesh-readout">Loading scene</span><span><i class="ph ph-arrows-out-cardinal"></i>${escapeHtml(contract.units)}</span></div></section>
+        <aside class="inspector-panel"><div class="inspector-tabs" role="tablist"><button class="inspector-tab active" id="inspector-tab-inspector" data-inspector-tab="inspector" role="tab" aria-selected="true">Inspector</button><button class="inspector-tab" id="inspector-tab-contract" data-inspector-tab="contract" role="tab" aria-selected="false">Contract</button></div><div class="inspector-scroll"><div id="inspector-pane" role="tabpanel" aria-labelledby="inspector-tab-inspector"><section class="panel-section selected-part-section"><div class="section-heading"><span>SELECTION</span><span class="section-count">${selectedCount}</span><button class="quiet-button" id="clear-selection">Clear</button></div><div id="selected-part"></div></section><section class="panel-section"><div class="section-heading"><span>SUBJECT COMPONENTS</span><span class="section-count">${parts.length}/${contract.parts.length}</span></div><div class="part-selection-help">Click one · Shift-click to add several to the agent request</div><div class="part-list" id="part-list">${parts.length ? parts.map((part) => partRow(part)).join("") : `<div class="empty-part-list">No matching components.</div>`}</div></section></div><div id="contract-pane" role="tabpanel" aria-labelledby="inspector-tab-contract" hidden><section class="panel-section contract-panel-section"><div class="section-heading"><span>CONTRACT</span><i class="ph ph-lock-key"></i></div><p class="contract-copy">Protected dimensions and semantic IDs are sent with every external agent build.</p><div class="metric-grid"><div><small>WIDTH</small><b>${contract.dimensions.width}${contract.units}</b></div><div><small>DEPTH</small><b>${contract.dimensions.depth}${contract.units}</b></div><div><small>HEIGHT</small><b>${contract.dimensions.height}${contract.units}</b></div><div><small>TRIANGLES</small><b>${asset.asset_id === state.inspect.current.asset_id ? state.report.metrics?.triangles ?? "-" : "-"}</b></div></div><div class="contract-subsection"><div class="section-heading"><span>REQUIRED VIEWS</span><span class="section-count">${REQUIRED_VIEWS.length}</span></div><div class="view-tags contract-view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div><div class="contract-agent-note"><i class="ph ph-sparkle"></i><span>Comment from Inspector to target a part. The agent preserves this contract unless you ask for a coordinated change.</span></div></section></div></div></aside>
+      </div>
+    </div>`;
+  document.querySelector("#inspector-pane")?.insertAdjacentHTML("afterbegin", `<section class="panel-section asset-details-section">${selectedAssetDetailsMarkup(asset, contract, qaStatus)}</section>`);
   document.querySelector("#selected-part").innerHTML = selectedPartMarkup();
-  document.querySelector("#part-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => selectPart(button.dataset.part)));
+  document.querySelectorAll("[data-inspector-tab]").forEach((button) => button.addEventListener("click", () => setInspectorTab(button.dataset.inspectorTab)));
+  setInspectorTab(state.inspectorTab);
+  document.querySelector("#part-list")?.querySelectorAll("button").forEach((button) => button.addEventListener("click", (event) => selectPart(button.dataset.part, false, event.shiftKey)));
   document.querySelectorAll("[data-library-asset]").forEach((card) => {
     card.addEventListener("click", () => selectWorkspaceAsset(card.dataset.libraryAsset));
     card.addEventListener("dragstart", (event) => { state.dragAssetId = card.dataset.libraryAsset; event.dataTransfer.setData("text/plain", state.dragAssetId); event.dataTransfer.effectAllowed = "copy"; });
     card.addEventListener("dragend", () => { state.dragAssetId = null; document.querySelector("#viewport")?.classList.remove("is-drop-target"); });
   });
   document.querySelectorAll("[data-library-add]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); addAssetToScene(button.dataset.libraryAdd); }));
+  document.querySelectorAll("[data-library-remove]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); removeSceneInstance(button.dataset.libraryRemove); }));
   document.querySelector("#library-generate").addEventListener("click", () => openCreateAsset());
+  document.querySelector("#workspace-generate").addEventListener("click", () => openCreateAsset());
+  document.querySelector("#workspace-agent").addEventListener("click", openAgent);
   document.querySelector("#comment-selected")?.addEventListener("click", openAgent);
-  document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; clearAnnotation(); updateSelectionUI(); highlightPart(null); renderAgentThread(); });
+  document.querySelector("#clear-selection").addEventListener("click", () => { state.selectedPart = null; state.selectedParts = []; clearAnnotation(); updateSelectionUI(); highlightPart(null); renderAgentThread(); });
   document.querySelector("#orbit-tool").addEventListener("click", () => setViewportMode("orbit"));
   document.querySelector("#grab-tool").addEventListener("click", () => setViewportMode("grab"));
   document.querySelector("#generate-here-tool").addEventListener("click", toggleScenePlaceMode);
@@ -686,13 +796,36 @@ function renderWorkspace() {
 
 function assetLibraryCard(asset) {
   const active = asset.asset_id === state.selectedAssetId ? "active" : "";
-  const instances = selectedAssetInstances(asset.asset_id).length;
-  return `<article class="asset-library-card ${active}" data-library-asset="${escapeHtml(asset.asset_id)}" draggable="true"><span class="asset-library-swatch swatch-${Math.abs(hash(asset.asset_id)) % 5}"></span><div><b>${escapeHtml(asset.name || asset.asset_id)}</b><small>${escapeHtml(asset.kind)} · ${instances} in scene</small></div><button class="icon-button" data-library-add="${escapeHtml(asset.asset_id)}" title="Add instance" aria-label="Add ${escapeHtml(asset.asset_id)} to scene"><i class="ph ph-plus"></i></button></article>`;
+  const assetInstances = selectedAssetInstances(asset.asset_id);
+  const instances = assetInstances.length;
+  const overlapCount = instances - new Set(assetInstances.map(instanceTransformKey)).size;
+  const overlapNote = overlapCount ? ` · ${overlapCount} overlapping` : "";
+  const instanceRows = instances ? assetInstances.map((instance, index) => `<div class="asset-instance-row"><span>Instance ${index + 1}${overlapCount && index ? " · overlapping" : ""}</span><button class="quiet-button" data-library-remove="${escapeHtml(instance.instance_id)}" type="button">Remove</button></div>`).join("") : `<div class="asset-instance-empty">Catalog only · 0 in scene</div>`;
+  return `<article class="asset-library-card ${active}" data-library-asset="${escapeHtml(asset.asset_id)}" draggable="true"><span class="asset-library-swatch swatch-${Math.abs(hash(asset.asset_id)) % 5}"></span><div><b>${escapeHtml(asset.name || asset.asset_id)}</b><small>${escapeHtml(asset.kind)} · ${instances} in scene${overlapNote}</small>${instanceRows}</div><button class="icon-button" data-library-add="${escapeHtml(asset.asset_id)}" title="Add instance" aria-label="Add ${escapeHtml(asset.asset_id)} to scene"><i class="ph ph-plus"></i></button></article>`;
+}
+
+function selectedAssetDetailsMarkup(asset, contract, qaStatus) {
+  const dimensions = contract.dimensions || {};
+  const count = selectedAssetInstances(asset.asset_id).length;
+  return `<div class="section-heading"><span>ASSET DETAILS</span><span class="section-count">${count} instance${count === 1 ? "" : "s"}</span></div><div class="asset-detail-title"><b>${escapeHtml(asset.name || asset.asset_id)}</b><span class="workspace-status ${String(qaStatus).toLowerCase()}">${escapeHtml(qaStatus)}</span></div><div class="asset-detail-grid"><span><small>DIMENSIONS</small><b>${dimensions.width ?? "-"} × ${dimensions.depth ?? "-"} × ${dimensions.height ?? "-"} ${escapeHtml(contract.units || "")}</b></span><span><small>SOURCE</small><b>${escapeHtml(asset.geometry_source || "UNKNOWN")}</b></span></div>`;
+}
+
+async function removeSceneInstance(instanceId) {
+  const instance = state.workspace?.scene?.instances?.find((item) => item.instance_id === instanceId);
+  if (!instance || !confirm(`Remove this ${instance.asset_id} instance from the scene? The asset remains in the library.`)) return;
+  try {
+    await api("/api/scene/instances/remove", { method: "POST", body: JSON.stringify({ instance_id: instanceId }) });
+    state.workspace = await api("/api/workspace");
+    if (state.selectedInstanceId === instanceId) state.selectedInstanceId = selectedAssetInstances(state.selectedAssetId)[0]?.instance_id || null;
+    renderView();
+    await loadArtifact();
+    toast("Instance removed from scene; asset retained in library.", "success");
+  } catch (error) { toast(error.message, "error"); }
 }
 
 function partRow(part) {
-  const active = part.part_id === state.selectedPart ? "active" : "";
-  return `<button class="part-row ${active}" data-part="${escapeHtml(part.part_id)}"><span class="part-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><span><b>${escapeHtml(part.part_id)}</b><small>${escapeHtml(part.role || "semantic part")}</small></span><i class="ph ph-caret-right"></i></button>`;
+  const active = isPartSelected(part.part_id) ? "active" : "";
+  return `<button class="part-row ${active}" data-part="${escapeHtml(part.part_id)}" aria-pressed="${active ? "true" : "false"}"><span class="part-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><span><b>${escapeHtml(part.part_id)}</b><small>${escapeHtml(part.role || "semantic part")}</small></span><i class="part-row-check ph ph-check"></i><i class="ph ph-caret-right"></i></button>`;
 }
 
 function selectWorkspaceAsset(assetId) {
@@ -701,6 +834,7 @@ function selectWorkspaceAsset(assetId) {
   state.selectedAssetId = asset.asset_id;
   state.selectedInstanceId = selectedAssetInstances(asset.asset_id)[0]?.instance_id || null;
   state.selectedPart = asset.contract.parts[0]?.part_id || null;
+  state.selectedParts = [];
   state.annotation = null;
   state.annotationMode = false;
   renderView();
@@ -713,6 +847,8 @@ async function addAssetToScene(assetId, position = null) {
     state.workspace = await api("/api/workspace");
     state.selectedAssetId = assetId;
     state.selectedInstanceId = selectedAssetInstances(assetId).at(-1)?.instance_id || null;
+    state.selectedPart = state.workspace.assets.find((asset) => asset.asset_id === assetId)?.contract.parts[0]?.part_id || null;
+    state.selectedParts = [];
     renderView();
     await loadArtifact();
     toast(`Added ${assetId} to scene`, "success");
@@ -730,10 +866,14 @@ function toggleScenePlaceMode() {
 }
 
 function selectedPartMarkup() {
-  const part = selectedContractPart();
-  if (!part) return `<div class="empty-selection"><i class="ph ph-cursor-click"></i><p>Select a semantic part in the list or the viewport.</p></div>`;
-  const editable = state.selectedAssetId === state.inspect.current.asset_id;
-  return `<div class="selected-part"><div class="selected-title"><span class="large-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><div><h2>${escapeHtml(part.part_id)}</h2><span>${escapeHtml(part.role || "semantic part")}</span></div><span class="selection-check"><i class="ph ph-check"></i></span></div><div class="selected-asset-note">${escapeHtml(state.selectedAssetId || "")} · ${editable ? "current editable asset" : "agent edit target"}</div><div class="field-label">SCALE FACTOR</div><div class="scale-fields"><label>X<input id="scale-x" type="number" min="0.01" step="0.05" value="1" ${editable ? "" : "disabled"} /></label><label>Y<input id="scale-y" type="number" min="0.01" step="0.05" value="1" ${editable ? "" : "disabled"} /></label><label>Z<input id="scale-z" type="number" min="0.01" step="0.05" value="1" ${editable ? "" : "disabled"} /></label></div><button class="primary-action" id="apply-scale" ${editable ? "" : "disabled"}><i class="ph ph-arrows-out"></i>${editable ? "Apply scale edit" : "Edit with agent"}</button><button class="quiet-button part-comment-button" id="comment-selected" type="button"><i class="ph ph-chat-circle-text"></i>Comment with agent</button></div>`;
+  const selections = selectedPartDescriptors();
+  if (!selections.length) return `<div class="empty-selection"><i class="ph ph-cursor-click"></i><p>Select a subject component in the list or click the model.</p><small>Shift-click lets the agent edit several related parts together.</small></div>`;
+  const primary = selections[0];
+  const part = selectedContractPart(primary.partId, primary.assetId) || { part_id: primary.partId, role: primary.role };
+  const editable = selections.length === 1 && primary.assetId === state.inspect.current.asset_id;
+  const selectionList = selections.map((selection) => `<span class="selection-chip"><i class="part-swatch swatch-${Math.abs(hash(selection.partId)) % 5}"></i>${escapeHtml(selection.partId)}</span>`).join("");
+  const controls = editable ? `<div class="field-label">SCALE FACTOR</div><div class="scale-fields"><label>X<input id="scale-x" type="number" min="0.01" step="0.05" value="1" /></label><label>Y<input id="scale-y" type="number" min="0.01" step="0.05" value="1" /></label><label>Z<input id="scale-z" type="number" min="0.01" step="0.05" value="1" /></label></div><button class="primary-action" id="apply-scale"><i class="ph ph-arrows-out"></i>Apply scale edit</button>` : `<div class="selection-agent-note"><i class="ph ph-sparkle"></i><span>${selections.length > 1 ? "These components will be sent together to the external LLM." : "This asset is ready for an external LLM edit."}</span></div>`;
+  return `<div class="selected-part"><div class="selected-title"><span class="large-swatch swatch-${Math.abs(hash(part.part_id)) % 5}"></span><div><h2>${selections.length === 1 ? escapeHtml(part.part_id) : `${selections.length} subjects selected`}</h2><span>${selections.length === 1 ? escapeHtml(part.role || "semantic part") : "one agent request"}</span></div><span class="selection-check"><i class="ph ph-check"></i></span></div><div class="selected-asset-note">${escapeHtml(primary.assetId || state.selectedAssetId || "")} · ${editable ? "direct scale edit available" : "agent edit target"}</div>${selections.length > 1 ? `<div class="selection-chips">${selectionList}</div>` : ""}${controls}<button class="quiet-button part-comment-button" id="comment-selected" type="button"><i class="ph ph-chat-circle-text"></i>${selections.length > 1 ? "Comment on selected subjects" : "Comment with agent"}</button></div>`;
 }
 
 function renderQa() {
@@ -757,10 +897,21 @@ function renderProviders() {
 
 function hash(value) { return [...value].reduce((total, character) => ((total << 5) - total + character.charCodeAt(0)) | 0, 0); }
 
-function selectSceneSelection({ assetId = state.selectedAssetId, instanceId = state.selectedInstanceId, partId = null }, preserveAnnotation = false) {
+function selectSceneSelection({ assetId = state.selectedAssetId, instanceId = state.selectedInstanceId, partId = null }, preserveAnnotation = false, additive = false) {
+  const canAdd = additive && partId && state.selectedAssetId === assetId && state.selectedInstanceId === instanceId;
   state.selectedAssetId = assetId;
   state.selectedInstanceId = instanceId;
-  state.selectedPart = partId;
+  if (canAdd) {
+    const descriptor = { assetId, instanceId, partId, role: selectedContractPart(partId, assetId)?.role || "semantic part" };
+    const key = selectionKey(descriptor);
+    state.selectedParts = state.selectedParts.some((selection) => selectionKey(selection) === key)
+      ? state.selectedParts.filter((selection) => selectionKey(selection) !== key)
+      : [...selectedPartDescriptors(), descriptor];
+    state.selectedPart = state.selectedParts.at(-1)?.partId || null;
+  } else {
+    state.selectedPart = partId;
+    state.selectedParts = partId ? [{ assetId, instanceId, partId, role: selectedContractPart(partId, assetId)?.role || "semantic part" }] : [];
+  }
   if (!preserveAnnotation) {
     state.annotationMode = false;
     annotationDraft = null;
@@ -768,13 +919,14 @@ function selectSceneSelection({ assetId = state.selectedAssetId, instanceId = st
     if (state.referenceImage?.name.startsWith("marked-area-")) removeReferenceImage();
   }
   updateSelectionUI();
-  highlightPart(partId);
+  highlightPart();
   renderAnnotationLayer();
+  renderTransformHud();
   renderAgentThread();
 }
 
-function selectPart(partId, preserveAnnotation = false) {
-  selectSceneSelection({ partId }, preserveAnnotation);
+function selectPart(partId, preserveAnnotation = false, additive = false) {
+  selectSceneSelection({ partId }, preserveAnnotation, additive);
 }
 
 function updateSelectionUI() {
@@ -783,7 +935,13 @@ function updateSelectionUI() {
     panel.innerHTML = selectedPartMarkup();
     panel.querySelector("#comment-selected")?.addEventListener("click", openAgent);
   }
-  document.querySelectorAll("#part-list .part-row").forEach((row) => row.classList.toggle("active", row.dataset.part === state.selectedPart));
+  document.querySelectorAll("#part-list .part-row").forEach((row) => {
+    const active = isPartSelected(row.dataset.part);
+    row.classList.toggle("active", active);
+    row.setAttribute("aria-pressed", String(active));
+  });
+  const count = document.querySelector("#workspace-selection-copy");
+  if (count) count.textContent = state.selectedParts.length ? `${state.selectedParts.length} subject${state.selectedParts.length === 1 ? "" : "s"} selected` : "Select a subject component to edit or comment";
 }
 
 function setViewportMode(mode) {
@@ -792,6 +950,7 @@ function setViewportMode(mode) {
   document.querySelector("#orbit-tool")?.classList.toggle("active", mode === "orbit");
   document.querySelector("#grab-tool")?.classList.toggle("active", mode === "grab");
   document.querySelector("#viewport")?.classList.toggle("is-grabbing", mode === "grab");
+  renderTransformHud();
 }
 
 function disposeViewer() {
@@ -869,10 +1028,15 @@ async function loadArtifact() {
   while (group.children.length) group.remove(group.children[0]);
   viewer.original.clear(); viewer.templates.clear(); viewer.instances.clear();
   let meshCount = 0;
+  const renderedTransforms = new Set();
   const assets = new Map((state.workspace.assets || []).map((asset) => [asset.asset_id, asset]));
-  for (const instance of state.workspace.scene?.instances || []) {
+  const instances = [...(state.workspace.scene?.instances || [])].sort((left, right) => Number(right.instance_id === state.selectedInstanceId) - Number(left.instance_id === state.selectedInstanceId));
+  for (const instance of instances) {
     const asset = assets.get(instance.asset_id);
     if (!asset) continue;
+    const transformKey = `${instance.asset_id}:${instanceTransformKey(instance)}`;
+    if (renderedTransforms.has(transformKey)) continue;
+    renderedTransforms.add(transformKey);
     try {
       let template = viewer.templates.get(asset.asset_id);
       if (!template) {
@@ -907,8 +1071,9 @@ async function loadArtifact() {
   }
   frameAsset();
   const readout = document.querySelector("#mesh-readout");
-  if (readout) readout.textContent = `${meshCount} render meshes · ${viewer.instances.size} instances`;
-  highlightPart(state.selectedPart);
+  if (readout) readout.textContent = `${meshCount} render meshes · ${viewer.instances.size}/${instances.length} rendered scene instances`;
+  highlightPart();
+  renderTransformHud();
 }
 
 function parseGlb(data) {
@@ -918,14 +1083,108 @@ function parseGlb(data) {
 function countMeshes(root) { let count = 0; root.traverse((node) => { if (node.isMesh) count++; }); return count; }
 
 let objectDrag = null;
+let transformSaveTimer = null;
+
+function activeInstanceRoot() {
+  return state.viewportMode === "grab" && state.selectedInstanceId ? viewer.instances.get(state.selectedInstanceId) : null;
+}
+
+function transformPayload(root) {
+  return {
+    position: { x: root.position.x, y: root.position.y, z: root.position.z },
+    rotation: { x: root.rotation.x, y: root.rotation.y, z: root.rotation.z },
+    scale: { x: root.scale.x, y: root.scale.y, z: root.scale.z },
+  };
+}
+
+function syncInstanceState(instanceId, root) {
+  const instance = state.workspace?.scene?.instances?.find((item) => item.instance_id === instanceId);
+  if (!instance) return;
+  const transform = transformPayload(root);
+  Object.assign(instance, transform);
+}
+
+function queueInstanceTransformSave() {
+  const instanceId = state.selectedInstanceId;
+  const root = instanceId ? viewer.instances.get(instanceId) : null;
+  if (!root) return;
+  syncInstanceState(instanceId, root);
+  const payload = transformPayload(root);
+  const status = document.querySelector("#transform-save-status");
+  if (status) { status.textContent = "Saving..."; status.className = "transform-save-status saving"; }
+  clearTimeout(transformSaveTimer);
+  transformSaveTimer = setTimeout(async () => {
+    try {
+      await api(`/api/scene/instances/${encodeURIComponent(instanceId)}/update`, { method: "POST", body: JSON.stringify({ transform: payload }) });
+      const savedStatus = document.querySelector("#transform-save-status");
+      if (savedStatus) { savedStatus.textContent = "Saved"; savedStatus.className = "transform-save-status saved"; }
+    } catch (error) {
+      const failedStatus = document.querySelector("#transform-save-status");
+      if (failedStatus) { failedStatus.textContent = "Not saved"; failedStatus.className = "transform-save-status failed"; }
+      toast(`Transform was not saved: ${error.message}`, "error");
+    }
+  }, 180);
+}
+
+function setTransformSaveStatus(text, className = "saved") {
+  const status = document.querySelector("#transform-save-status");
+  if (status) { status.textContent = text; status.className = `transform-save-status ${className}`; }
+}
+
+function renderTransformHud() {
+  const hud = document.querySelector("#transform-hud");
+  const root = activeInstanceRoot();
+  if (!hud) return;
+  const visible = Boolean(root);
+  hud.hidden = !visible;
+  document.querySelector("#viewport")?.classList.toggle("is-transforming", visible);
+  if (!visible) return;
+  const instance = state.workspace?.scene?.instances?.find((item) => item.instance_id === state.selectedInstanceId);
+  const asset = state.workspace?.assets?.find((item) => item.asset_id === instance?.asset_id);
+  const target = document.querySelector("#transform-target");
+  const position = document.querySelector("#transform-position");
+  const rotation = document.querySelector("#transform-rotation");
+  if (target) target.textContent = asset?.name || instance?.asset_id || "Selected asset";
+  if (position) position.textContent = [root.position.x, root.position.y, root.position.z].map((value) => value.toFixed(2)).join(", ");
+  if (rotation) rotation.textContent = [root.rotation.x, root.rotation.y, root.rotation.z].map((value) => `${Math.round(THREE.MathUtils.radToDeg(value))}°`).join(", ");
+}
+
+function nudgeSelectedAsset(key, event) {
+  if (state.activeView !== "workspace" || state.agentOpen || state.createOpen || state.scenePlaceMode) return false;
+  const tag = event.target?.tagName;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.isComposing) return false;
+  const root = activeInstanceRoot();
+  if (!root) return false;
+  const step = event.altKey ? 0.01 : event.shiftKey ? 0.25 : 0.05;
+  const angle = THREE.MathUtils.degToRad(event.altKey ? 3 : event.shiftKey ? 45 : 15);
+  switch (key.toLowerCase()) {
+    case "arrowleft": root.position.x -= step; break;
+    case "arrowright": root.position.x += step; break;
+    case "arrowup": root.position.z -= step; break;
+    case "arrowdown": root.position.z += step; break;
+    case "r": root.position.y += step; break;
+    case "f": root.position.y = Math.max(0, root.position.y - step); break;
+    case "q": root.rotation.y += angle; break;
+    case "e": root.rotation.y -= angle; break;
+    default: return false;
+  }
+  event.preventDefault();
+  syncInstanceState(state.selectedInstanceId, root);
+  renderTransformHud();
+  queueInstanceTransformSave();
+  return true;
+}
 
 function handleViewportPointerDown(event) {
   if (state.scenePlaceMode) { event.preventDefault(); return; }
   const hit = partAtClientPoint(event);
-  if (hit?.partId) selectSceneSelection(hit);
+  if (hit?.partId) selectSceneSelection(hit, false, event.shiftKey);
   if (state.viewportMode !== "grab" || !viewer.root) return;
+  const root = viewer.instances.get(state.selectedInstanceId);
+  if (!root) { toast("Select an asset before using Transform mode."); return; }
   event.preventDefault();
-  objectDrag = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY, root: viewer.instances.get(state.selectedInstanceId) || viewer.root };
+  objectDrag = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY, root, target: hit?.partId ? hit.object : root };
+  if (objectDrag.target !== root) setTransformSaveStatus("Session only", "session");
   viewer.canvas.setPointerCapture(event.pointerId);
 }
 
@@ -935,8 +1194,11 @@ function handleViewportPointerMove(event) {
   const deltaY = event.clientY - objectDrag.lastY;
   objectDrag.lastX = event.clientX;
   objectDrag.lastY = event.clientY;
-  objectDrag.root.rotation.y += deltaX * 0.01;
-  objectDrag.root.rotation.x += deltaY * 0.01;
+  const target = objectDrag.target || objectDrag.root;
+  target.rotation.y += deltaX * 0.01;
+  target.rotation.x += deltaY * 0.01;
+  if (target === objectDrag.root) syncInstanceState(state.selectedInstanceId, objectDrag.root);
+  renderTransformHud();
 }
 
 function handleViewportPointerUp(event) {
@@ -951,6 +1213,7 @@ function handleViewportPointerUp(event) {
   }
   if (!objectDrag) return;
   if (viewer.canvas.hasPointerCapture(event.pointerId)) viewer.canvas.releasePointerCapture(event.pointerId);
+  if (objectDrag.target === objectDrag.root) queueInstanceTransformSave();
   objectDrag = null;
 }
 
@@ -962,7 +1225,7 @@ function partAtClientPoint(event) {
   viewer.raycaster.setFromCamera(viewer.pointer, viewer.camera);
   const hit = viewer.raycaster.intersectObject(viewer.root, true)[0];
   if (!hit?.object?.userData?.partId) return null;
-  return { partId: hit.object.userData.partId, instanceId: hit.object.userData.instanceId, assetId: hit.object.userData.assetId };
+  return { partId: hit.object.userData.partId, instanceId: hit.object.userData.instanceId, assetId: hit.object.userData.assetId, object: hit.object };
 }
 
 function groundPoint(event) {
@@ -977,17 +1240,18 @@ function groundPoint(event) {
 
 function pickPart(event) {
   const hit = partAtClientPoint(event);
-  if (hit?.partId) selectSceneSelection(hit);
+  if (hit?.partId) selectSceneSelection(hit, false, event.shiftKey);
 }
 
-function highlightPart(partId) {
+function highlightPart() {
   if (!viewer.root) return;
   viewer.root.traverse((node) => {
     if (!node.isMesh) return;
-    const selected = partId && node.userData.partId === partId && (!state.selectedAssetId || node.userData.assetId === state.selectedAssetId) && (!state.selectedInstanceId || node.userData.instanceId === state.selectedInstanceId);
+    const selectedAsset = node.userData.assetId === state.selectedAssetId && node.userData.instanceId === state.selectedInstanceId;
+    const selectedPart = isPartSelected(node.userData.partId, node.userData.assetId, node.userData.instanceId);
     const entries = viewer.original.get(node.uuid) || [];
     entries.forEach(({ material, color, emissive, intensity }) => {
-      if (selected && material.emissive) { material.emissive.setHex(0x9cff80); material.emissiveIntensity = 0.4; material.color?.setHex(0xb9ffc0); }
+      if ((selectedAsset || selectedPart) && material.emissive) { material.emissive.setHex(selectedPart ? 0x9cff80 : 0x6f9fff); material.emissiveIntensity = selectedPart ? 0.4 : 0.16; material.color?.setHex(selectedPart ? 0xb9ffc0 : 0xaecbff); }
       else { if (color && material.color) material.color.copy(color); if (emissive && material.emissive) material.emissive.copy(emissive); material.emissiveIntensity = intensity || 0; }
     });
   });
@@ -1001,9 +1265,10 @@ function frameAsset() {
 }
 
 function frameSelectedPart() {
-  if (!viewer.root || !state.selectedPart) return frameAsset();
+  const selections = selectedPartDescriptors();
+  if (!viewer.root || !selections.length) return frameAsset();
   const bounds = new THREE.Box3();
-  viewer.root.traverse((node) => { if (node.isMesh && node.userData.partId === state.selectedPart && (!state.selectedAssetId || node.userData.assetId === state.selectedAssetId) && (!state.selectedInstanceId || node.userData.instanceId === state.selectedInstanceId)) bounds.expandByObject(node); });
+  viewer.root.traverse((node) => { if (node.isMesh && selections.some((selection) => selection.partId === node.userData.partId && selection.assetId === node.userData.assetId && selection.instanceId === node.userData.instanceId)) bounds.expandByObject(node); });
   if (bounds.isEmpty()) return frameAsset();
   const sphere = bounds.getBoundingSphere(new THREE.Sphere());
   const distance = Math.max(sphere.radius * 3.2, 0.35);
@@ -1154,12 +1419,14 @@ async function runQa(source = "workspace") {
 
 async function applyScale() {
   if (state.build.status === "running") { toast("Build in progress. Wait for the current artifact to finish."); return; }
-  const partId = state.selectedPart; if (!partId) return;
+  const selections = selectedPartDescriptors();
+  if (selections.length !== 1 || selections[0].assetId !== state.inspect.current.asset_id) { toast("Scale edit needs one part from the current asset."); return; }
+  const partId = selections[0].partId; if (!partId) return;
   const values = Object.fromEntries(["x", "y", "z"].map((axis) => [axis, Number(document.querySelector(`#scale-${axis}`).value)]));
   try { state.busy = true; await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: partId, scale_x: values.x, scale_y: values.y, scale_z: values.z }) }); toast(`Scaled ${partId}`, "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); } finally { state.busy = false; }
 }
 
-async function refreshAfterMutation() { const [inspect, report, history, workspace] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = selectedAssetContract()?.parts[0]?.part_id || null; hydrateHeader(); renderView(); await loadArtifact(); }
+async function refreshAfterMutation() { const [inspect, report, history, workspace] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = selectedAssetContract()?.parts[0]?.part_id || null; state.selectedParts = []; hydrateHeader(); renderView(); await loadArtifact(); }
 
 async function rollback(checkpoint) {
   if (!checkpoint || !confirm("Restore this checkpoint?")) return;
@@ -1169,15 +1436,16 @@ async function rollback(checkpoint) {
 document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", () => { state.activeView = item.dataset.view; renderView(); if (state.activeView === "workspace") loadArtifact(); }));
 document.querySelector("#validate").addEventListener("click", runQa);
 document.querySelector("#search").addEventListener("input", (event) => { state.query = event.target.value; if (state.activeView === "workspace") renderView(); });
-document.querySelector("#create-asset").addEventListener("click", openCreateAsset);
-document.querySelector("#quick-create").addEventListener("click", openCreateAsset);
+document.querySelector("#create-asset").addEventListener("click", () => openCreateAsset());
+document.querySelector("#quick-create").addEventListener("click", () => openCreateAsset());
 document.querySelector("#create-form").addEventListener("submit", saveAssetDraft);
 document.querySelector("#create-generate").addEventListener("click", generateAssetFromBrief);
 document.querySelector("#create-reference-file").addEventListener("change", attachReferenceImage);
 document.querySelector("#agent-reference-file").addEventListener("change", attachReferenceImage);
 document.querySelector("#reference-remove").addEventListener("click", removeReferenceImage);
 document.querySelector("#agent-attachment-remove").addEventListener("click", removeReferenceImage);
-document.querySelector("#create-agent").addEventListener("change", (event) => { state.agentProvider = event.target.value; renderAgentProviderStatus(); syncCreateAgent(); });
+document.querySelectorAll("#create-id, #create-prompt, #create-reference").forEach((input) => input.addEventListener("input", renderCreateSummary));
+document.querySelector("#create-agent").addEventListener("change", (event) => { state.agentProvider = event.target.value; renderAgentProviderStatus(); syncCreateAgent(); renderCreateSummary(); });
 document.querySelector("#create-close").addEventListener("click", closeCreateAsset);
 document.querySelector("#create-cancel").addEventListener("click", closeCreateAsset);
 document.querySelector("[data-close-create]").addEventListener("click", closeCreateAsset);
@@ -1200,6 +1468,7 @@ document.querySelector("#clear-actions").addEventListener("click", () => { state
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#search").focus(); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); state.agentOpen ? closeAgent() : openAgent(); }
+  if (nudgeSelectedAsset(event.key, event)) return;
   if (event.key === "Escape") { if (state.createOpen) closeCreateAsset(); else if (state.agentOpen) closeAgent(); }
 });
 document.addEventListener("click", (event) => { if (event.target.closest("#apply-scale")) applyScale(); });
