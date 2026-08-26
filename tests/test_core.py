@@ -69,6 +69,9 @@ class CoreWorkflowTest(unittest.TestCase):
             self.assertEqual(project.asset_versions()["current_version"], "v001")
             self.assertFalse(project.asset_versions()["can_undo"])
             self.assertEqual(project.undo()["status"], "NOOP")
+            catalog_versions = project.asset_versions(ASSET["asset_id"])
+            self.assertEqual(catalog_versions["current_version"], "v001")
+            self.assertFalse(catalog_versions["can_undo"])
 
 
 if __name__ == "__main__":

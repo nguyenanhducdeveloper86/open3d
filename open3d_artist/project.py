@@ -363,6 +363,9 @@ class Project:
         if asset_id is not None and (not isinstance(asset_id, str) or not asset_id.strip()):
             raise ProjectError("asset_id must be a non-empty string")
         current = self.current()
+        reference = current
+        if asset_id is not None and asset_id != current.get("asset_id"):
+            reference = self.workspace_asset(asset_id)
         records = self._checkpoint_records()
         versions: list[dict[str, Any]] = []
         seen: set[tuple[Any, ...]] = set()
@@ -405,23 +408,24 @@ class Project:
                 break
         for operation in self.history():
             add(operation.get("result_checkpoint"), operation)
-        add(current.get("checkpoint_id"))
+        add(reference.get("checkpoint_id"))
         if not versions:
             add(current.get("checkpoint_id"))
 
-        current_signature = self._version_signature(current)
+        current_signature = self._version_signature(reference)
         current_version = None
         current_asset_index = -1
         for index, version in enumerate(versions):
             version["current"] = self._version_signature(version) == current_signature
             if version["current"]:
                 current_version = version
-                current_asset_index = sum(1 for previous in versions[:index] if previous.get("asset_id") == current.get("asset_id"))
+                current_asset_index = sum(1 for previous in versions[:index] if previous.get("asset_id") == reference.get("asset_id"))
+        current_checkpoint = current_version["checkpoint_id"] if current_version else reference.get("checkpoint_id")
         return {
             "schema_version": "0.1.0",
-            "current_checkpoint": current.get("checkpoint_id"),
+            "current_checkpoint": current_checkpoint,
             "current_version": current_version["version_id"] if current_version else None,
-            "can_undo": current_asset_index > 0,
+            "can_undo": reference is current and current_asset_index > 0,
             "versions": versions,
         }
 
