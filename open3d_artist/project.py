@@ -515,7 +515,9 @@ class Project:
     def replace_generated_asset(self, asset: dict[str, Any], glb: bytes, *, blend: bytes | None = None,
                                 agent: str, prompt: str, run_id: str, workspace: str | None = None,
                                 auto_fit_dimensions: bool = False, source: str = "blender",
-                                operation_name: str = "asset.agent_build", quality_profile: str | None = None) -> dict[str, Any]:
+                                operation_name: str = "asset.agent_build", quality_profile: str | None = None,
+                                reference_pipeline: str | None = None,
+                                reference_spec_digest: str | None = None) -> dict[str, Any]:
         """Adopt a generated asset after contract and GLB validation."""
 
         candidate = normalize_asset(asset)
@@ -546,6 +548,10 @@ class Project:
             agent_build["workspace"] = workspace
         if quality_profile:
             agent_build["quality_profile"] = quality_profile
+        if reference_pipeline:
+            agent_build["reference_pipeline"] = reference_pipeline
+        if reference_spec_digest:
+            agent_build["reference_spec_digest"] = reference_spec_digest
         next_ref = {
             **current,
             "asset_id": candidate["asset_id"],

@@ -17,6 +17,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .contracts import digest_json, load_asset
 from .project import Project, ProjectError
+from .reference import validate_reference_spec
 
 MAX_OUTPUT = 16 * 1024
 MAX_TIMEOUT = 60.0
@@ -335,21 +336,29 @@ def _stage_reference_image(reference_image: Any, workspace: Path) -> dict[str, A
             "bytes": len(raw), "path": str(path.name)}
 
 
-def _agent_build_instruction(prompt: str, reference_path: str | None = None, referenced_assets_path: str | None = None) -> str:
+def _agent_build_instruction(prompt: str, reference_path: str | None = None, referenced_assets_path: str | None = None,
+                             reference_pipeline: str | None = None) -> str:
     reference_note = (f"\nA user reference image is staged at `{reference_path}`. Inspect it with the available agent tools and use it as visual guidance; do not copy hidden metadata or claim image-to-mesh reconstruction.\n"
                       if reference_path else "")
+    reference_pipeline_note = ("\nReference pipeline: img2threejs-style staged intake. Before modeling, write `reference_spec.json` with the exact schema below. It is a required machine-checked plan, not a claim of neural image-to-3D reconstruction.\n"
+                               if reference_pipeline == "img2threejs" else "")
+    reference_spec_note = ("""3. reference_spec.json — required for this reference build. Use this exact shape:
+   {"schema_version":"0.1.0","profile":"img2threejs","target_asset_id":"<asset.json asset_id>","suitability":"pass|conditional","subject":"...","silhouette":{"primary":"..."},"components":[{"id":"...","role":"...","level":"macro|meso|micro","visible_features":["..."]}],"detail_inventory":[{"id":"...","component":"component id","feature":"...","implementation":"actual geometry/material plan","evidence":"visible|inferred|not_observed"}],"materials":[{"id":"...","region":"...","finish":"...","evidence":"visible|inferred|not_observed"}],"build_passes":["blockout","structural-pass","form-refinement","material-pass","surface-pass","lighting-pass","interaction-pass","optimization-pass"],"unseen_regions":["..."],"review_policy":{"on_failure":"refine-spec|refine-code|request-input|stop","require_side_by_side":true,"max_corrections":2}}
+   Include at least 3 components, 5 detail_inventory entries, 2 materials, and one unseen region.
+""" if reference_pipeline == "img2threejs" else "")
     assets_note = (f"\nReferenced workspace asset contracts are staged at `{referenced_assets_path}`. Use them as context for @asset mentions. The first mentioned asset is the build target; keep other referenced assets unchanged unless explicitly requested.\n"
                    if referenced_assets_path else "")
     return f"""You are the Open3D Blender asset builder. Work only in the current workspace.
 
 Open3D will execute your build.py with Blender after you finish. The user request is:
 {prompt.strip()}
-{reference_note}{assets_note}
+{reference_note}{reference_pipeline_note}{assets_note}
 
 Required files in the current workspace:
 1. asset.json — a valid Open3D v0.1 asset contract. Use the exact schema_version string `0.1.0`, a supported kind (`prop`, `environment`, `character`, `material`, or `scene`), `dimensions.width/depth/height`, a `parts` array (not `semantic_parts`), `geometry.triangle_budget.max`, `outputs`, and this production gate in metadata:
    metadata.quality_gate = {{"profile":"production", "minimum_materials":6, "minimum_primitives_per_part":2, "required_detail_tags":["primary_form","surface_breakup","edge_treatment","material_breakup"], "part_detail_tags":{{<every part_id>: [all four required tags]}}}}.
 2. build.py — a Blender Python script that parses the named arguments after Blender's `--`: `--contract <contract path> --output <output directory>`, creates or edits the requested model with bpy, and writes both `asset.glb` and `scene.blend` into the supplied output directory.
+{reference_spec_note}
 
 Build rules:
 - Use only bpy, math, json, pathlib, and the Python standard library. Do not use network, subprocess, shell commands, or external downloads.
@@ -383,7 +392,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     target_asset_id: str | None = None,
                     referenced_asset_ids: list[str] | None = None,
                     create_asset: bool = False,
-                    quality_profile: str | None = None) -> dict[str, Any]:
+                    quality_profile: str | None = None,
+                    reference_pipeline: str | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -396,6 +406,10 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         raise ProjectError("create_asset must be a boolean")
     if quality_profile not in {None, "production"}:
         raise ProjectError("quality_profile must be production or null")
+    if reference_pipeline not in {None, "img2threejs"}:
+        raise ProjectError("reference_pipeline must be img2threejs or null")
+    if reference_pipeline == "img2threejs" and reference_image is None:
+        raise ProjectError("img2threejs reference pipeline requires reference_image")
     if referenced_asset_ids is not None and (not isinstance(referenced_asset_ids, list) or len(referenced_asset_ids) > MAX_REFERENCED_ASSETS):
         raise ProjectError(f"referenced_asset_ids must be a list of at most {MAX_REFERENCED_ASSETS} assets")
     requested_reference_ids = []
@@ -455,8 +469,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         referenced_assets.append({"asset_id": catalog_asset["asset_id"], "name": catalog_asset.get("name"), "kind": catalog_asset.get("kind"), "contract": catalog_asset["contract"]})
     if referenced_assets:
         (workspace / "referenced_assets.json").write_text(json.dumps(referenced_assets, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": None if create_asset else target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets], "create_asset": create_asset}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None, "referenced_assets.json" if referenced_assets else None)
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "reference_pipeline": reference_pipeline, "target_asset_id": None if create_asset else target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets], "create_asset": create_asset}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None, "referenced_assets.json" if referenced_assets else None, reference_pipeline)
     completed = None
     try:
         completed = _run_agent_command(agent, executable, instruction, cwd=workspace, timeout=float(timeout), runner=runner, build=True)
@@ -472,6 +486,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         "schema_version": "0.1.0", "agent": agent, "run": str(run_dir.relative_to(project_path)),
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
         "reference_image": staged_reference,
+        "reference_pipeline": reference_pipeline,
         "create_asset": create_asset,
         "quality_profile": quality_profile,
         "pool": pool,
@@ -479,9 +494,9 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                 "exit_status": getattr(completed, "returncode", None)},
         "started_at": started, "ended_at": time.time(), "mutations": "NONE", "project_state_unchanged": True,
     }
-    required = (workspace / "asset.json", workspace / "build.py")
+    required = (workspace / "asset.json", workspace / "build.py", *((workspace / "reference_spec.json",) if reference_pipeline else ()))
     if cli_status != "PASS" or any(not path.is_file() or path.is_symlink() for path in required):
-        result = {**common, "status": "FAILED", "reason": cli_reason if cli_status != "PASS" else "BUILD_FILES_MISSING"}
+        result = {**common, "status": "FAILED", "reason": cli_reason if cli_status != "PASS" else "REFERENCE_SPEC_MISSING" if reference_pipeline and not (workspace / "reference_spec.json").is_file() else "BUILD_FILES_MISSING"}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
 
@@ -491,6 +506,15 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         result = {**common, "status": "FAILED", "reason": "CONTRACT_REJECTED", "error": str(exc)}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
+
+    reference_spec = None
+    if reference_pipeline:
+        try:
+            reference_spec = validate_reference_spec(workspace / "reference_spec.json", target_asset_id=staged_asset["asset_id"])
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            result = {**common, "status": "FAILED", "reason": "REFERENCE_SPEC_REJECTED", "error": str(exc)}
+            (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
 
     if worker is None:
         from .workers import BlenderSandbox
@@ -510,16 +534,16 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         glb_path, blend_path = output / "asset.glb", output / "scene.blend"
         if glb_path.stat().st_size > 512 * 1024 * 1024 or blend_path.stat().st_size > 1024 * 1024 * 1024:
             raise ProjectError("agent build artifact is too large")
-        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile)
+        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile, reference_pipeline=reference_pipeline, reference_spec_digest=reference_spec.get("digest") if reference_spec else None)
     except (OSError, ValueError, ProjectError) as exc:
         result = {**common, "status": "FAILED", "reason": "OUTPUT_REJECTED", "error": str(exc), "blender": blender_result}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
     if adopted.get("status") != "PASS":
-        result = {**common, "status": "FAILED", "reason": "QA_REJECTED", "report": adopted.get("report"), "blender": blender_result}
+        result = {**common, "status": "FAILED", "reason": "QA_REJECTED", "report": adopted.get("report"), "blender": blender_result, "reference_spec": reference_spec}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
-    result = {**common, "status": "PASS", "reason": "BLENDER_BUILD_COMPLETE", "blender": blender_result,
+    result = {**common, "status": "PASS", "reason": "BLENDER_BUILD_COMPLETE", "blender": blender_result, "reference_spec": reference_spec,
               "mutation": adopted, "project_state_unchanged": False, "ended_at": time.time()}
     (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return result

@@ -777,15 +777,18 @@ async function executeAgentBuild(text, options = {}) {
   addAgentMessage("user", attachment ? `${messageText}\n\nReference image attached: ${attachment.name}` : messageText);
   startBuildStatus(state.agentProvider);
   const actionId = beginAction(`${label} request`, "Starting external LLM → Blender → QA");
-  addAgentMessage("agent", `Sending this request to ${label}. It will author a staged Blender build, then Open3D will run Blender and validate the resulting GLB.`);
-  updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
+  addAgentMessage("agent", `Sending this request to ${label}. ${attachment ? "It will inventory the reference with an img2threejs-style spec, then author the staged Blender build." : "It will author the staged Blender build."} Open3D will run Blender and validate the resulting GLB.`);
+  updateAction(actionId, "running", attachment ? "LLM is writing reference_spec.json, asset.json, and build.py" : "LLM is authoring asset.json and build.py");
   try {
     const request = { agent: state.agentProvider, prompt: requestPrompt, timeout: 900 };
     if (!options.create) request.asset_id = targetAssetId;
     if (mentionedAssets.length) request.referenced_asset_ids = mentionedAssets.map((asset) => asset.asset_id);
     if (options.create) request.create_asset = true;
     if (options.spawn) request.spawn = options.spawn;
-    if (attachment) request.reference_image = attachment;
+    if (attachment) {
+      request.reference_image = attachment;
+      request.reference_pipeline = "img2threejs";
+    }
     const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify(request) });
     const failedChecks = result.report?.checks?.filter((check) => check.status !== "PASS").map((check) => `${check.check_id}: ${qaCheckText(check)}`).join("\n") || "";
     const output = [result.error, result.reason, failedChecks && `QA failures:\n${failedChecks}`, result.cli?.stderr, result.cli?.stdout].filter(Boolean).join("\n\n").slice(0, 6000) || "No build output";
@@ -843,8 +846,8 @@ async function generateAssetFromBrief() {
   state.agentCreateAssetId = brief.id;
   openAgent();
   startBuildStatus(brief.generator);
-  addAgentMessage("agent", all2apiAgent ? `${label} started. All2API will create a reference image, then ${state.agentProvider} will run Blender and QA.` : `${label} started. The pipeline will generate/refine the asset, normalize semantic parts, verify the GLB, and refresh this workspace.`);
-  updateAction(actionId, "running", all2apiAgent ? "Generating All2API reference / external Blender build" : "Generating reference / Meshy geometry");
+  addAgentMessage("agent", all2apiAgent ? `${label} started. All2API will create a reference image, then ${state.agentProvider} will inventory it with img2threejs-style passes before Blender and QA.` : `${label} started. The pipeline will generate/refine the asset, normalize semantic parts, verify the GLB, and refresh this workspace.`);
+  updateAction(actionId, "running", all2apiAgent ? "Generating reference / img2threejs spec / Blender build" : "Generating reference / Meshy geometry");
   try {
     const mode = brief.generator === "meshy-multi" ? "multi_image" : brief.generator === "meshy-image" ? "image" : "text";
     const request = all2apiAgent
