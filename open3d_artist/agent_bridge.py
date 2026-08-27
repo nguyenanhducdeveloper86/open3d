@@ -24,6 +24,7 @@ MAX_PLAN_PROMPT = 8 * 1024
 MAX_BUILD_TIMEOUT = 900.0
 MAX_BUILD_PROMPT = 16 * 1024
 MAX_REFERENCE_IMAGE_BYTES = 600 * 1024
+MAX_REFERENCED_ASSETS = 16
 AGENTS = ("codex", "claude", "opencode")
 POOL_URL_ENV = "OPEN3D_AGENT_POOL_URL"
 POOL_TOKEN_ENV = "OPEN3D_AGENT_POOL_TOKEN"
@@ -332,14 +333,16 @@ def _stage_reference_image(reference_image: Any, workspace: Path) -> dict[str, A
             "bytes": len(raw), "path": str(path.name)}
 
 
-def _agent_build_instruction(prompt: str, reference_path: str | None = None) -> str:
+def _agent_build_instruction(prompt: str, reference_path: str | None = None, referenced_assets_path: str | None = None) -> str:
     reference_note = (f"\nA user reference image is staged at `{reference_path}`. Inspect it with the available agent tools and use it as visual guidance; do not copy hidden metadata or claim image-to-mesh reconstruction.\n"
                       if reference_path else "")
+    assets_note = (f"\nReferenced workspace asset contracts are staged at `{referenced_assets_path}`. Use them as context for @asset mentions. The first mentioned asset is the build target; keep other referenced assets unchanged unless explicitly requested.\n"
+                   if referenced_assets_path else "")
     return f"""You are the Open3D Blender asset builder. Work only in the current workspace.
 
 Open3D will execute your build.py with Blender after you finish. The user request is:
 {prompt.strip()}
-{reference_note}
+{reference_note}{assets_note}
 
 Required files in the current workspace:
 1. asset.json — a valid Open3D v0.1 asset contract. It must contain schema_version, asset_id, kind, units=m, positive dimensions, non-empty semantic parts, geometry.triangle_budget.max, and outputs.
@@ -371,7 +374,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     which: Callable[[str], str | None] = shutil.which,
                     worker: Any | None = None,
                     reference_image: dict[str, Any] | None = None,
-                    target_asset_id: str | None = None) -> dict[str, Any]:
+                    target_asset_id: str | None = None,
+                    referenced_asset_ids: list[str] | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -380,6 +384,14 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         raise ProjectError(f"prompt must be non-empty and no larger than {MAX_BUILD_PROMPT} bytes")
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_BUILD_TIMEOUT:
         raise ProjectError(f"timeout must be between 0 and {MAX_BUILD_TIMEOUT} seconds")
+    if referenced_asset_ids is not None and (not isinstance(referenced_asset_ids, list) or len(referenced_asset_ids) > MAX_REFERENCED_ASSETS):
+        raise ProjectError(f"referenced_asset_ids must be a list of at most {MAX_REFERENCED_ASSETS} assets")
+    requested_reference_ids = []
+    for asset_id in referenced_asset_ids or []:
+        if not isinstance(asset_id, str) or not asset_id.strip() or len(asset_id) > 64:
+            raise ProjectError("referenced_asset_ids must contain non-empty asset IDs")
+        if asset_id.casefold() not in {item.casefold() for item in requested_reference_ids}:
+            requested_reference_ids.append(asset_id)
     raw_project = Path(project).expanduser()
     if raw_project.is_symlink() or not raw_project.is_dir():
         raise ProjectError("agent project must be a real directory")
@@ -425,8 +437,14 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                 source = previous_path / source_name
                 if source.is_file() and not source.is_symlink():
                     shutil.copy2(source, workspace / target_name)
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": target_asset_id or current_ref.get("asset_id")}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None)
+    referenced_assets = []
+    for asset_id in requested_reference_ids:
+        catalog_asset = project_obj.workspace_asset(asset_id)
+        referenced_assets.append({"asset_id": catalog_asset["asset_id"], "name": catalog_asset.get("name"), "kind": catalog_asset.get("kind"), "contract": catalog_asset["contract"]})
+    if referenced_assets:
+        (workspace / "referenced_assets.json").write_text(json.dumps(referenced_assets, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets]}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None, "referenced_assets.json" if referenced_assets else None)
     completed = None
     try:
         completed = _run_agent_command(agent, executable, instruction, cwd=workspace, timeout=float(timeout), runner=runner, build=True)

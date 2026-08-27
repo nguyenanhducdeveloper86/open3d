@@ -155,7 +155,7 @@ class _Handler(BaseHTTPRequestHandler):
                 elif path == "/api/agent/plan":
                     value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
                 elif path == "/api/agent/build":
-                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"))
+                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"), referenced_asset_ids=body.get("referenced_asset_ids"))
                     if value.get("status") == "PASS" and (isinstance(body.get("spawn"), dict) or body.get("create_asset") is True):
                         current = value.get("mutation", {}).get("current", {})
                         value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))

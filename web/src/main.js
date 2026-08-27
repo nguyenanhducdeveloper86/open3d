@@ -111,7 +111,7 @@ app.innerHTML = `
       <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
-      <form class="agent-composer" id="agent-form"><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div class="agent-attachment" id="agent-attachment" hidden><i class="ph ph-image-square"></i><span id="agent-attachment-name"></span><button class="icon-button" type="button" id="agent-attachment-remove" aria-label="Remove attached reference"><i class="ph ph-x"></i></button></div><div><label class="agent-attach-button" for="agent-reference-file"><i class="ph ph-paperclip"></i>Reference<input id="agent-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /></label><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
+      <form class="agent-composer" id="agent-form"><div class="agent-mention-bar" id="agent-mentions" aria-live="polite"><span class="agent-mention-placeholder"><i class="ph ph-at"></i>Drop an asset here or type @asset</span></div><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div class="agent-attachment" id="agent-attachment" hidden><i class="ph ph-image-square"></i><span id="agent-attachment-name"></span><button class="icon-button" type="button" id="agent-attachment-remove" aria-label="Remove attached reference"><i class="ph ph-x"></i></button></div><div><label class="agent-attach-button" for="agent-reference-file"><i class="ph ph-paperclip"></i>Reference<input id="agent-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /></label><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
     </aside>
     <div class="build-monitor" id="build-monitor" hidden role="status"><span class="build-monitor-pulse"></span><div><b id="build-monitor-title">BUILD IN PROGRESS</b><small id="build-monitor-detail">External LLM request is running</small></div><time id="build-monitor-elapsed">00:00</time><button class="quiet-button" id="reopen-build" type="button">Open agent</button></div>
     <div class="toast-region" id="toasts" aria-live="polite"></div>
@@ -138,6 +138,10 @@ function setRuntimeStatus(status) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function beginAction(label, detail = "") {
@@ -452,6 +456,72 @@ function selectedWorkspaceAsset() {
   return state.workspace?.assets.find((asset) => asset.asset_id === state.selectedAssetId) || state.workspace?.assets.find((asset) => asset.asset_id === state.inspect?.current?.asset_id) || null;
 }
 
+function workspaceAssetById(assetId) {
+  const normalized = String(assetId ?? "").trim().replace(/^@/, "").toLowerCase();
+  return normalized ? (state.workspace?.assets || []).find((asset) => String(asset.asset_id).toLowerCase() === normalized) || null : null;
+}
+
+function extractAssetMentions(text) {
+  const mentions = [];
+  const seen = new Set();
+  for (const match of String(text || "").matchAll(/@([A-Za-z0-9][A-Za-z0-9_-]*)/g)) {
+    const asset = workspaceAssetById(match[1]);
+    if (asset && !seen.has(asset.asset_id)) {
+      seen.add(asset.asset_id);
+      mentions.push(asset);
+    }
+  }
+  return mentions;
+}
+
+function removeAgentMention(assetId) {
+  const input = document.querySelector("#agent-input");
+  if (!input) return;
+  input.value = input.value.replace(new RegExp(`@${escapeRegExp(assetId)}(?=$|\\s|[.,!?;:)])`, "gi"), "").replace(/[ \t]{2,}/g, " ").trim();
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.focus();
+}
+
+function renderAgentMentions() {
+  const root = document.querySelector("#agent-mentions");
+  const input = document.querySelector("#agent-input");
+  if (!root || !input) return;
+  const mentions = extractAssetMentions(input.value);
+  root.classList.toggle("has-mentions", Boolean(mentions.length));
+  root.innerHTML = mentions.length
+    ? `<span class="agent-mention-label"><i class="ph ph-at"></i>MENTIONS</span>${mentions.map((asset) => `<button class="agent-mention-chip" type="button" data-remove-agent-mention="${escapeHtml(asset.asset_id)}" aria-label="Remove @${escapeHtml(asset.asset_id)}">@${escapeHtml(asset.asset_id)}<i class="ph ph-x"></i></button>`).join("")}`
+    : `<span class="agent-mention-placeholder"><i class="ph ph-at"></i>Drop an asset here or type @asset</span>`;
+  root.querySelectorAll("[data-remove-agent-mention]").forEach((button) => button.addEventListener("click", () => removeAgentMention(button.dataset.removeAgentMention)));
+}
+
+function droppedWorkspaceAsset(event) {
+  const value = event.dataTransfer?.getData("application/x-open3d-asset") || event.dataTransfer?.getData("text/plain") || state.dragAssetId;
+  return workspaceAssetById(value);
+}
+
+function clearAgentAssetDropState() {
+  document.querySelector("#agent-input")?.classList.remove("is-asset-drop-target");
+  document.querySelector("#agent-mentions")?.classList.remove("is-asset-drop-target");
+}
+
+function insertAgentAssetMention(event) {
+  const asset = droppedWorkspaceAsset(event);
+  const input = document.querySelector("#agent-input");
+  if (!asset || !input) return;
+  event.preventDefault();
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  const before = input.value.slice(0, start);
+  const after = input.value.slice(end);
+  const prefix = before && !/\s$/.test(before) ? " " : "";
+  const suffix = after && !/^\s/.test(after) ? " " : " ";
+  input.setRangeText(`${prefix}@${asset.asset_id}${suffix}`, start, end, "end");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.focus();
+  clearAgentAssetDropState();
+  toast(`Mentioned @${asset.asset_id}`, "success");
+}
+
 function selectedAssetContract() {
   return contractForAsset();
 }
@@ -496,6 +566,7 @@ function renderAgentTarget() {
   if (context) context.textContent = target ? `${asset?.asset_id || "Asset"} · ${targetLabel}${marked}` : state.annotation ? `${asset?.asset_id || "Asset"} · marked viewport area` : `${asset?.asset_id || "Asset"} · select a subject component or mark an area.`;
   if (note) note.textContent = target ? `Target ${targetLabel}${marked} · LLM → Blender → QA` : state.annotation ? "Marked area · LLM → Blender → QA" : "Whole asset · LLM → Blender → QA";
   if (input && !input.value.trim()) input.placeholder = target ? `Describe the fix for ${targetLabel}` : state.annotation ? "Describe what is wrong in the marked area" : "Try: build a production-quality Scandinavian timber house";
+  renderAgentMentions();
 }
 
 function addAgentMessage(role, text, patch = null) {
@@ -555,14 +626,21 @@ async function executeAgentBuild(text, options = {}) {
   }
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
-  const target = options.create ? null : selectedAgentTarget();
-  const markedContext = !options.create && state.annotation ? `Marked viewport area: x=${state.annotation.x.toFixed(3)}, y=${state.annotation.y.toFixed(3)}, width=${state.annotation.width.toFixed(3)}, height=${state.annotation.height.toFixed(3)} in normalized viewport coordinates. A cropped viewport reference is attached.` : "";
+  const mentionedAssets = options.create ? [] : extractAssetMentions(text);
+  const mentionedAssetId = mentionedAssets[0]?.asset_id || "";
+  const selectedTarget = options.create ? null : selectedAgentTarget();
+  const target = mentionedAssetId && selectedTarget?.parts?.some((part) => part.assetId !== mentionedAssetId) ? null : selectedTarget;
+  const targetAssetId = mentionedAssetId || state.selectedAssetId || state.inspect?.current?.asset_id;
+  const markedContext = !options.create && state.annotation && (!mentionedAssetId || state.annotation.assetId === mentionedAssetId) ? `Marked viewport area: x=${state.annotation.x.toFixed(3)}, y=${state.annotation.y.toFixed(3)}, width=${state.annotation.width.toFixed(3)}, height=${state.annotation.height.toFixed(3)} in normalized viewport coordinates. A cropped viewport reference is attached.` : "";
   const targetParts = target?.parts?.map((part) => `- ${part.partId} (${part.role})`).join("\n");
+  const mentionContext = mentionedAssets.length ? `Referenced workspace assets:\n${mentionedAssets.map((asset) => `- ${asset.asset_id} (${asset.kind})`).join("\n")}` : "";
   const referenceNote = options.referencePath ? `Reference path/note supplied by the user: ${options.referencePath}` : "";
   const requestPrompt = target
-    ? [`Target semantic parts:\n${targetParts}`, markedContext, referenceNote, "Edit scope: modify only these selected parts; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].filter(Boolean).join("\n")
-    : [referenceNote, markedContext, text].filter(Boolean).join("\n");
-  const messageTarget = target ? `Targets: ${target.parts.map((part) => part.partId).join(" + ")}` : state.annotation ? "Target: marked viewport area" : "";
+    ? [mentionContext, `Target semantic parts:\n${targetParts}`, markedContext, referenceNote, "Edit scope: modify only these selected parts; preserve all other semantic parts, part IDs, contract dimensions, and QA requirements unless the user explicitly requests a coordinated change.", `User request: ${text}`].filter(Boolean).join("\n")
+    : [mentionContext, referenceNote, markedContext, text].filter(Boolean).join("\n");
+  const mentionLabel = mentionedAssets.length ? `Assets: ${mentionedAssets.map((asset) => `@${asset.asset_id}`).join(" + ")}` : "";
+  const targetLabel = target ? `Targets: ${target.parts.map((part) => part.partId).join(" + ")}` : state.annotation && !mentionedAssetId ? "Target: marked viewport area" : "";
+  const messageTarget = [mentionLabel, targetLabel].filter(Boolean).join("\n");
   const messageText = messageTarget ? `${messageTarget}\n\n${text}` : text;
   if (provider?.status !== "ACTIVE") {
     addAgentMessage("user", messageText);
@@ -581,7 +659,8 @@ async function executeAgentBuild(text, options = {}) {
   updateAction(actionId, "running", "LLM is authoring asset.json and build.py");
   try {
     const request = { agent: state.agentProvider, prompt: requestPrompt, timeout: 900 };
-    if (!options.create) request.asset_id = state.selectedAssetId || state.inspect?.current?.asset_id;
+    if (!options.create) request.asset_id = targetAssetId;
+    if (mentionedAssets.length) request.referenced_asset_ids = mentionedAssets.map((asset) => asset.asset_id);
     if (options.create) request.create_asset = true;
     if (options.spawn) request.spawn = options.spawn;
     if (attachment) request.reference_image = attachment;
@@ -611,6 +690,7 @@ async function submitAgentMessage(event) {
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
+  renderAgentMentions();
   await executeAgentBuild(text);
 }
 
@@ -775,8 +855,8 @@ function renderWorkspace() {
   document.querySelector("#part-list")?.querySelectorAll("button").forEach((button) => button.addEventListener("click", (event) => selectPart(button.dataset.part, false, event.shiftKey)));
   document.querySelectorAll("[data-library-asset]").forEach((card) => {
     card.addEventListener("click", () => selectWorkspaceAsset(card.dataset.libraryAsset));
-    card.addEventListener("dragstart", (event) => { state.dragAssetId = card.dataset.libraryAsset; event.dataTransfer.setData("text/plain", state.dragAssetId); event.dataTransfer.effectAllowed = "copy"; });
-    card.addEventListener("dragend", () => { state.dragAssetId = null; document.querySelector("#viewport")?.classList.remove("is-drop-target"); });
+    card.addEventListener("dragstart", (event) => { state.dragAssetId = card.dataset.libraryAsset; event.dataTransfer.setData("application/x-open3d-asset", state.dragAssetId); event.dataTransfer.setData("text/plain", state.dragAssetId); event.dataTransfer.effectAllowed = "copy"; });
+    card.addEventListener("dragend", () => { state.dragAssetId = null; document.querySelector("#viewport")?.classList.remove("is-drop-target"); clearAgentAssetDropState(); });
   });
   document.querySelectorAll("[data-library-add]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); addAssetToScene(button.dataset.libraryAdd); }));
   document.querySelectorAll("[data-library-remove]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); removeSceneInstance(button.dataset.libraryRemove); }));
@@ -1534,6 +1614,18 @@ document.querySelector("#agent-rail-tab").addEventListener("click", openAgent);
 document.querySelector("#close-agent").addEventListener("click", closeAgent);
 document.querySelector("#agent-backdrop").addEventListener("click", closeAgent);
 document.querySelector("#agent-form").addEventListener("submit", submitAgentMessage);
+document.querySelector("#agent-input").addEventListener("input", renderAgentMentions);
+["#agent-input", "#agent-mentions"].forEach((selector) => {
+  const target = document.querySelector(selector);
+  target?.addEventListener("dragover", (event) => {
+    if (!droppedWorkspaceAsset(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    target.classList.add("is-asset-drop-target");
+  });
+  target?.addEventListener("dragleave", () => target.classList.remove("is-asset-drop-target"));
+  target?.addEventListener("drop", insertAgentAssetMention);
+});
 document.querySelector("#refresh-agents").addEventListener("click", refreshAgents);
 document.querySelector("#agent-provider").addEventListener("change", (event) => {
   state.agentProvider = event.target.value;
@@ -1554,4 +1646,5 @@ document.addEventListener("keydown", (event) => {
 });
 document.addEventListener("click", (event) => { if (event.target.closest("#apply-scale")) applyScale(); });
 
+renderAgentMentions();
 loadState();
