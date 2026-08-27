@@ -347,17 +347,21 @@ Open3D will execute your build.py with Blender after you finish. The user reques
 {reference_note}{assets_note}
 
 Required files in the current workspace:
-1. asset.json — a valid Open3D v0.1 asset contract. It must contain schema_version, asset_id, kind, units=m, positive dimensions, non-empty semantic parts, geometry.triangle_budget.max, and outputs.
+1. asset.json — a valid Open3D v0.1 asset contract. Use the exact schema_version string `0.1.0`, a supported kind (`prop`, `environment`, `character`, `material`, or `scene`), `dimensions.width/depth/height`, a `parts` array (not `semantic_parts`), `geometry.triangle_budget.max`, `outputs`, and this production gate in metadata:
+   metadata.quality_gate = {{"profile":"production", "minimum_materials":6, "minimum_primitives_per_part":2, "required_detail_tags":["primary_form","surface_breakup","edge_treatment","material_breakup"], "part_detail_tags":{{<every part_id>: [all four required tags]}}}}.
 2. build.py — a Blender Python script that parses the named arguments after Blender's `--`: `--contract <contract path> --output <output directory>`, creates or edits the requested model with bpy, and writes both `asset.glb` and `scene.blend` into the supplied output directory.
 
 Build rules:
 - Use only bpy, math, json, pathlib, and the Python standard library. Do not use network, subprocess, shell commands, or external downloads.
 - Name every semantic mesh object exactly with its part_id and set object custom properties open3d_part_id and open3d_part_role.
+- Set every semantic mesh object's `open3d_detail_tags` custom property to the four required tags from the quality gate. The tags must describe actual modeled geometry, not text-only claims.
 - Set the scene custom properties open3d_asset_id and open3d_asset_digest from the contract.
 - Export a real GLB with bpy.ops.export_scene.gltf(filepath=..., export_format='GLB', export_extras=True).
 - Do not assume the contract path is the first positional argument; read the `--contract` and `--output` values exactly.
 - Target the installed Blender 5.2 LTS: use `scene.render.engine = 'BLENDER_EEVEE'` (or a try/except fallback), not enum introspection through bpy.types.
 - Keep the model inside the contract dimensions and triangle budget. For a new asset request, treat current_asset.json as context only: choose dimensions that bound the final model with a small margin instead of reusing unrelated dimensions. For an edit request, preserve existing dimensions unless the user asks to resize. Prefer separate editable semantic parts and production-quality bevels/materials when the prompt requests them.
+- Production-detail bar: model the reference's recognizable silhouette and major secondary forms. For architectural props, this normally means a clean roof with two planes/ridge/eaves (no dangling or floating roof bars), wall/cladding and trim, door slab/frame/hardware, window glass/frames/mullions, chimney masonry/cap/flue, foundation/plinth/stone breakup, and porch/treads/rails when present. Use material separation and restrained bevels to make these details readable at game-view distance.
+- Before finishing, inspect the generated scene from a three-quarter view and remove accidental intersections, detached geometry, oversized rods, duplicate subjects, hidden placeholder blocks, and details that extend beyond the intended silhouette. Do not call a generic box with a few strips production quality.
 - Do not claim success in text unless asset.json, build.py, asset.glb, and scene.blend are actually present.
 
 The file current_asset.json contains the current asset contract. If previous_build.py exists, use it as the editable source for an edit request. Preserve existing semantic part IDs where possible and change only what the user asked for. You may replace the previous build with a better one, but write the two required files before finishing."""
@@ -378,7 +382,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     reference_image: dict[str, Any] | None = None,
                     target_asset_id: str | None = None,
                     referenced_asset_ids: list[str] | None = None,
-                    create_asset: bool = False) -> dict[str, Any]:
+                    create_asset: bool = False,
+                    quality_profile: str | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -389,6 +394,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         raise ProjectError(f"timeout must be between 0 and {MAX_BUILD_TIMEOUT} seconds")
     if not isinstance(create_asset, bool):
         raise ProjectError("create_asset must be a boolean")
+    if quality_profile not in {None, "production"}:
+        raise ProjectError("quality_profile must be production or null")
     if referenced_asset_ids is not None and (not isinstance(referenced_asset_ids, list) or len(referenced_asset_ids) > MAX_REFERENCED_ASSETS):
         raise ProjectError(f"referenced_asset_ids must be a list of at most {MAX_REFERENCED_ASSETS} assets")
     requested_reference_ids = []
@@ -466,6 +473,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
         "reference_image": staged_reference,
         "create_asset": create_asset,
+        "quality_profile": quality_profile,
         "pool": pool,
         "cli": {"status": cli_status, "reason": cli_reason, "executable": executable, "stdout": stdout, "stderr": stderr,
                 "exit_status": getattr(completed, "returncode", None)},
@@ -474,6 +482,13 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     required = (workspace / "asset.json", workspace / "build.py")
     if cli_status != "PASS" or any(not path.is_file() or path.is_symlink() for path in required):
         result = {**common, "status": "FAILED", "reason": cli_reason if cli_status != "PASS" else "BUILD_FILES_MISSING"}
+        (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        return result
+
+    try:
+        staged_asset = load_asset(workspace / "asset.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        result = {**common, "status": "FAILED", "reason": "CONTRACT_REJECTED", "error": str(exc)}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
 
@@ -487,7 +502,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         return result
 
     try:
-        asset = load_asset(workspace / "asset.json")
+        asset = staged_asset
         if not create_asset and target_asset_id and asset["asset_id"] != target_asset_id:
             result = {**common, "status": "FAILED", "reason": "TARGET_ASSET_MISMATCH", "error": f"Agent returned {asset['asset_id']} but the edit target is {target_asset_id}", "blender": blender_result}
             (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -495,7 +510,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         glb_path, blend_path = output / "asset.glb", output / "scene.blend"
         if glb_path.stat().st_size > 512 * 1024 * 1024 or blend_path.stat().st_size > 1024 * 1024 * 1024:
             raise ProjectError("agent build artifact is too large")
-        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True)
+        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile)
     except (OSError, ValueError, ProjectError) as exc:
         result = {**common, "status": "FAILED", "reason": "OUTPUT_REJECTED", "error": str(exc), "blender": blender_result}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")

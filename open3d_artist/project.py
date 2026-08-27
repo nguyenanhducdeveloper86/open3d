@@ -454,7 +454,9 @@ class Project:
         asset = self.load_current_asset()
         glb = self.store.read_bytes(current["glb_artifact"])
         meshes = None if current.get("geometry_source", "contract") != "contract" else meshes_for_asset(asset)
-        report = validate_asset_and_glb(asset, glb, artifact_id=current["glb_artifact"], meshes=meshes)
+        agent_build = current.get("agent_build") if isinstance(current.get("agent_build"), dict) else {}
+        quality_profile = "production" if agent_build.get("quality_profile") == "production" else None
+        report = validate_asset_and_glb(asset, glb, artifact_id=current["glb_artifact"], meshes=meshes, quality_profile=quality_profile)
         qa_id = self.store.put_json(report, kind="qa-report", metadata={"asset_id": asset["asset_id"], "input_artifact_id": current["glb_artifact"]})
         current["qa_artifact"] = qa_id
         current["qa_status"] = report["status"]
@@ -513,11 +515,11 @@ class Project:
     def replace_generated_asset(self, asset: dict[str, Any], glb: bytes, *, blend: bytes | None = None,
                                 agent: str, prompt: str, run_id: str, workspace: str | None = None,
                                 auto_fit_dimensions: bool = False, source: str = "blender",
-                                operation_name: str = "asset.agent_build") -> dict[str, Any]:
+                                operation_name: str = "asset.agent_build", quality_profile: str | None = None) -> dict[str, Any]:
         """Adopt a generated asset after contract and GLB validation."""
 
         candidate = normalize_asset(asset)
-        report = validate_asset_and_glb(candidate, glb, meshes=None)
+        report = validate_asset_and_glb(candidate, glb, meshes=None, quality_profile=quality_profile)
         fitted_dimensions = None
         if auto_fit_dimensions and report["status"] != "PASS" and all(
             check["status"] == "PASS" or check["check_id"] == "geometry.dimensions" for check in report["checks"]
@@ -528,7 +530,7 @@ class Project:
                 fitted_dimensions = {axis: round(float(value) * 1.02, 6) for axis, value in zip(("width", "depth", "height"), actual)}
                 candidate["dimensions"] = fitted_dimensions
                 glb = patch_glb_metadata(glb, candidate)
-                report = validate_asset_and_glb(candidate, glb, meshes=None)
+                report = validate_asset_and_glb(candidate, glb, meshes=None, quality_profile=quality_profile)
         if report["status"] != "PASS":
             return {"status": "FAIL", "report": report, "mutated": False}
         current = self.current()
@@ -542,6 +544,8 @@ class Project:
         agent_build = {"agent": agent, "run_id": run_id, "prompt": prompt}
         if workspace:
             agent_build["workspace"] = workspace
+        if quality_profile:
+            agent_build["quality_profile"] = quality_profile
         next_ref = {
             **current,
             "asset_id": candidate["asset_id"],

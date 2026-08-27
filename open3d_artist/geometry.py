@@ -207,6 +207,9 @@ def _append_indices(buffer: bytearray, values: list[int]) -> tuple[int, int]:
 
 def generate_glb(asset: dict[str, Any]) -> bytes:
     meshes = meshes_for_asset(asset)
+    metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
+    quality_gate = metadata.get("quality_gate") if isinstance(metadata.get("quality_gate"), dict) else {}
+    part_detail_tags = quality_gate.get("part_detail_tags") if isinstance(quality_gate.get("part_detail_tags"), dict) else {}
     binary = bytearray()
     buffer_views: list[dict[str, Any]] = []
     accessors: list[dict[str, Any]] = []
@@ -248,7 +251,13 @@ def generate_glb(asset: dict[str, Any]) -> bytes:
                 "primitives": [{"attributes": {"NORMAL": normal_accessor, "POSITION": position_accessor}, "indices": index_accessor, "material": material_index}],
             }
         )
-        nodes.append({"name": mesh.part_id, "mesh": mesh_index, "extras": {"open3d": {"part_id": mesh.part_id, "part_role": "semantic"}}})
+        tags = part_detail_tags.get(mesh.part_id, quality_gate.get("required_detail_tags", []))
+        if isinstance(tags, list):
+            tags = ",".join(item for item in tags if isinstance(item, str) and item.strip())
+        extras = {"open3d": {"part_id": mesh.part_id, "part_role": "semantic"}}
+        if isinstance(tags, str) and tags.strip():
+            extras["open3d_detail_tags"] = tags
+        nodes.append({"name": mesh.part_id, "mesh": mesh_index, "extras": extras})
 
     gltf = {
         "asset": {"generator": "Open3D Artist 0.1", "version": "2.0"},

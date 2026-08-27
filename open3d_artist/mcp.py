@@ -63,7 +63,7 @@ def _call(project: Project, name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "production.agent_receipt":
         return production_agent_receipt(args["agent"], args["run"], output_root=args.get("output_root"))
     if name == "agent.build":
-        return run_agent_build(args["agent"], args["prompt"], project.root, timeout=args.get("timeout", 900))
+        return run_agent_build(args["agent"], args["prompt"], project.root, timeout=args.get("timeout", 900), quality_profile="production")
     raise ProjectError(f"unknown tool: {name}")
 
 

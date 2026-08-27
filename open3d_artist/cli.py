@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "meshy-generate":
             _json(MeshyPipeline().run(project, asset_id=args.asset_id, prompt=args.prompt, mode=args.mode, kind=args.kind, image_urls=args.image_urls, consent=args.consent, quality=args.quality, reference_provider=args.reference_provider, timeout=args.timeout))
         elif args.command == "agent-build":
-            _json(run_agent_build(args.agent, args.prompt, project.root, timeout=args.timeout))
+            _json(run_agent_build(args.agent, args.prompt, project.root, timeout=args.timeout, quality_profile="production"))
         return 0
     except (ProjectError, ProviderError, WorkerError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"open3d: {exc}", file=sys.stderr)

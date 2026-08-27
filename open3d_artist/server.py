@@ -151,7 +151,7 @@ class _Handler(BaseHTTPRequestHandler):
                     asset_id = body["asset_id"]
                     prompt = f"Create a new asset with asset_id {asset_id}. {body['prompt']}"
                     reference = All2ApiImageGenerator().generate(prompt=prompt, quality=body.get("quality", "high"), timeout=min(float(body.get("timeout", 900)), 900))
-                    value = run_agent_build(agent, prompt, self.server.project.root, timeout=min(float(body.get("timeout", 900)), 900), reference_image=reference, create_asset=True)
+                    value = run_agent_build(agent, prompt, self.server.project.root, timeout=min(float(body.get("timeout", 900)), 900), reference_image=reference, create_asset=True, quality_profile="production")
                     value["generation"] = {key: item for key, item in reference.items() if key != "data"}
                     if value.get("status") == "PASS" and isinstance(body.get("spawn"), dict):
                         value["scene_instance"] = self.server.project.add_scene_instance(value["mutation"]["current"]["asset_id"], body["spawn"])
@@ -176,7 +176,7 @@ class _Handler(BaseHTTPRequestHandler):
                 elif path == "/api/agent/plan":
                     value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
                 elif path == "/api/agent/build":
-                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"), referenced_asset_ids=body.get("referenced_asset_ids"), create_asset=body.get("create_asset") is True)
+                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"), referenced_asset_ids=body.get("referenced_asset_ids"), create_asset=body.get("create_asset") is True, quality_profile="production")
                     if value.get("status") == "PASS" and (isinstance(body.get("spawn"), dict) or body.get("create_asset") is True):
                         current = value.get("mutation", {}).get("current", {})
                         instances = self.server.project.workspace().get("scene", {}).get("instances", [])

@@ -57,7 +57,7 @@ Open `http://127.0.0.1:8289` for the desktop viewer. The viewer reads the curren
 
 The example `asset.yaml` uses JSON syntax, which is valid YAML 1.2, so the core has no runtime dependency. For normal YAML authoring install `pip install -e '.[yaml]'`.
 
-External agent builds are staged under `.open3d/agent-runs/`: the selected agent writes `asset.json` and `build.py`, Open3D executes the script with Blender in the OS sandbox, then verifies semantic parts, triangle budget, dimensions, and GLB identity before checkpointing the new asset. There is no local-agent fallback.
+External agent builds are staged under `.open3d/agent-runs/`: the selected agent writes `asset.json` and `build.py`, Open3D executes the script with Blender in the OS sandbox, then verifies semantic parts, triangle budget, dimensions, GLB identity, material/primitive breakup, normals, detail coverage, and long-thin roof-span artifacts before checkpointing the new asset. Agent entry points use this production gate; there is no local-agent fallback. These are deterministic structural checks, not a claim of human or external visual approval.
 
 To route all three CLIs through one 9router-style token pool, copy `.env.example`, replace the token, export it, and start the server:
 
