@@ -113,12 +113,13 @@ class BlenderSandbox:
 
     OPERATIONS = {"inspect", "validate", "export_glb"}
 
-    def __init__(self, project_root: str | Path, *, blender: str = "blender", bwrap: str = "bwrap", sandbox_exec: str = "sandbox-exec", worker_script: str | Path | None = None):
+    def __init__(self, project_root: str | Path, *, blender: str = "blender", bwrap: str = "bwrap", sandbox_exec: str = "sandbox-exec", worker_script: str | Path | None = None, pipeline_script: str | Path | None = None):
         self.root = Path(project_root).resolve()
         self.blender = blender
         self.bwrap = bwrap
         self.sandbox_exec = sandbox_exec
         self.worker_script = Path(worker_script or Path(__file__).with_name("blender_worker.py")).resolve()
+        self.pipeline_script = Path(pipeline_script or Path(__file__).with_name("blender_pipeline.py")).resolve()
 
     def _sandbox_kind(self) -> str | None:
         if shutil.which(self.bwrap) or Path(self.bwrap).is_file():
@@ -335,15 +336,69 @@ class BlenderSandbox:
             response["process"] = {**response["process"], "status": "FAIL", "output": result.output + "\nagent build must emit asset.glb and scene.blend"}
             return response
         if status == "PASS":
+            pipeline = self._run_agent_pipeline(contract_path, output_path, timeout=min(max(float(timeout), 30.0), 240.0), allow_unsafe=allow_unsafe)
+            response["pipeline"] = pipeline
+            if pipeline["process"]["status"] != "PASS":
+                response["process"] = {**response["process"], "status": "FAIL", "output": result.output + "\n" + pipeline["process"].get("output", "")}
+                return response
             try:
                 asset = load_asset(contract_path)
                 patched = patch_glb_metadata(glb_path.read_bytes(), asset)
                 read_glb_json(patched)
                 glb_path.write_bytes(patched)
-                response["artifacts"] = {"glb": str(glb_path), "blend": str(blend_path)}
+                response["artifacts"] = {"glb": str(glb_path), "blend": str(blend_path), "pipeline": str(output_path / "pipeline.json"), "renders": str(output_path / "renders")}
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 response["process"] = {**response["process"], "status": "FAIL", "output": result.output + f"\n{exc}"}
         return response
+
+    def _run_agent_pipeline(self, contract_path: Path, output_path: Path, *, timeout: float, allow_unsafe: bool) -> dict[str, Any]:
+        """Run the fixed design/surface/render pass after an agent build."""
+
+        contract_path = _inside(self.root, contract_path, label="agent pipeline contract", must_exist=True)
+        output_path = _inside(self.root, output_path, label="agent pipeline output")
+        if not self.pipeline_script.is_file():
+            raise WorkerUnavailable(f"Blender pipeline script is missing: {self.pipeline_script}")
+        blend_path = output_path / "scene.blend"
+        if not blend_path.is_file():
+            raise WorkerError("agent build pipeline input scene.blend is missing")
+        sandbox_kind = self._sandbox_kind()
+        if sandbox_kind is None and not allow_unsafe:
+            raise WorkerUnavailable("real sandbox unavailable; agent Blender pipeline refuses unsandboxed execution")
+        with tempfile.TemporaryDirectory(prefix="open3d-pipeline-input-") as input_name:
+            input_dir = Path(input_name)
+            job_file = input_dir / "pipeline.json"
+            if sandbox_kind == "bubblewrap":
+                script_arg = f"/pipeline/{self.pipeline_script.name}"
+                contract_arg = f"/project/{contract_path.relative_to(self.root)}"
+                command = [self.bwrap, "--die-with-parent", "--unshare-net"]
+                for runtime_path in (Path("/usr"), Path("/lib"), Path("/lib64"), Path("/bin"), Path("/etc"), Path("/opt")):
+                    if runtime_path.exists():
+                        command.extend(["--ro-bind", str(runtime_path), str(runtime_path)])
+                command.extend([
+                    "--ro-bind", str(self.root), "/project", "--ro-bind", str(self.pipeline_script.parent), "/pipeline",
+                    "--bind", str(output_path), "/output", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project",
+                    str(self._blender_path()), *self._blender_flags(), "--python", script_arg, "--",
+                    "--blend", "/output/scene.blend", "--contract", contract_arg, "--output", "/output",
+                ])
+            elif sandbox_kind == "macos-sandbox":
+                profile = self._macos_profile(contract_path.parent, output_path)
+                command = [self.sandbox_exec, "-p", profile, str(self._blender_path()), *self._blender_flags(), "--python", str(self.pipeline_script), "--", "--blend", str(blend_path), "--contract", str(contract_path), "--output", str(output_path)]
+            else:
+                command = [str(self._blender_path()), *self._blender_flags(), "--python", str(self.pipeline_script), "--", "--blend", str(blend_path), "--contract", str(contract_path), "--output", str(output_path)]
+            result = run_limited(command, cwd=self.root, timeout=timeout, env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output_path), "TMPDIR": "/tmp", "LANG": "C.UTF-8"})
+            receipt_path = output_path / "pipeline.json"
+            receipt: dict[str, Any] = {}
+            if receipt_path.is_file():
+                try:
+                    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    receipt = {"status": "FAIL", "error": "pipeline receipt is invalid JSON"}
+            process_status = result.status if result.status != "PASS" else ("PASS" if result.returncode == 0 and receipt.get("status") == "PASS" else "FAIL")
+            return {
+                "worker": "blender-design-pipeline",
+                "process": {"status": process_status, "returncode": result.returncode, "duration_ms": result.duration_ms, "output": result.output},
+                "result": receipt,
+            }
 
     def _store_glb(self, data: bytes) -> str:
         project = Project(self.root)

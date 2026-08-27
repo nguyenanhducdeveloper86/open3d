@@ -96,6 +96,12 @@ class _Handler(BaseHTTPRequestHandler):
                 if path == "/api/artifact/current":
                     data = self.server.project.store.read_bytes(self.server.project.current()["glb_artifact"])
                     return self._send(HTTPStatus.OK, data, content_type="model/gltf-binary")
+                if path.startswith("/api/preview/"):
+                    view = path.rsplit("/", 1)[-1]
+                    artifact = self.server.project.current().get("preview_artifacts", {}).get(view)
+                    if not artifact:
+                        return self._error(HTTPStatus.NOT_FOUND, "preview unavailable")
+                    return self._send(HTTPStatus.OK, self.server.project.store.read_bytes(artifact), content_type="image/png")
                 path_parts = path.split("/")
                 if len(path_parts) == 4 and path_parts[1:3] == ["api", "assets"]:
                     return self._send(HTTPStatus.OK, self.server.project.workspace_asset(path_parts[3]))

@@ -367,9 +367,12 @@ Build rules:
 - Set the scene custom properties open3d_asset_id and open3d_asset_digest from the contract.
 - Export a real GLB with bpy.ops.export_scene.gltf(filepath=..., export_format='GLB', export_extras=True).
 - Do not assume the contract path is the first positional argument; read the `--contract` and `--output` values exactly.
-- Target the installed Blender 5.2 LTS: use `scene.render.engine = 'BLENDER_EEVEE'` (or a try/except fallback), not enum introspection through bpy.types.
+- Target the installed Blender 5.2 LTS: use `scene.render.engine = 'BLENDER_EEVEE'` (or a try/except fallback to `BLENDER_EEVEE_NEXT`/Workbench), not enum introspection through bpy.types.
 - Keep the model inside the contract dimensions and triangle budget. For a new asset request, treat current_asset.json as context only: choose dimensions that bound the final model with a small margin instead of reusing unrelated dimensions. For an edit request, preserve existing dimensions unless the user asks to resize. Prefer separate editable semantic parts and production-quality bevels/materials when the prompt requests them.
-- Production-detail bar: model the reference's recognizable silhouette and major secondary forms. For architectural props, this normally means a clean roof with two planes/ridge/eaves (no dangling or floating roof bars), wall/cladding and trim, door slab/frame/hardware, window glass/frames/mullions, chimney masonry/cap/flue, foundation/plinth/stone breakup, and porch/treads/rails when present. Use material separation and restrained bevels to make these details readable at game-view distance.
+- Design like a Blender artist, not like a box assembler. Work from primary silhouette to secondary construction to tertiary surface cues. Every visible hard edge needs a reason: use support geometry, restrained bevels, weighted normals, and selective smooth shading; use profile curves, cylinders, subdivision, or loop-based forms for anything round, inflated, bent, or organic. Add transition surfaces where forms meet so there are no paper-thin intersections, floating rods, coincident faces, or arbitrary detail strips.
+- Required modeling passes: blockout proportions; structural construction and contact points; form refinement with curvature/edge-radius hierarchy; material separation with real Principled values; surface breakup with UVs and readable grain/seams/fasteners; lighting and three-quarter inspection; interaction-safe semantic parts; final optimization. Do not call a flat color plus a few cubes a production asset.
+- Production-detail bar: model the reference's recognizable silhouette and major secondary forms. For architectural props, this normally means a clean roof with two planes/ridge/eaves (no dangling or floating roof bars), wall/cladding and trim, door slab/frame/hardware, window glass/frames/mullions, chimney masonry/cap/flue, foundation/plinth/stone breakup, and porch/treads/rails when present. Use material separation, real bevels, smooth/weighted shading, and enough form transitions to make these details readable at game-view distance.
+- Mark genuinely curved parts with `open3d_smooth = True`; create UV maps for every exported semantic mesh. Keep bevel widths proportional to the part instead of using one global oversized radius. The fixed Open3D Blender design pass will add a conservative bevel/normal/UV/render pass after this script, so leave geometry editable and do not fake its evidence with custom properties alone.
 - Before finishing, inspect the generated scene from a three-quarter view and remove accidental intersections, detached geometry, oversized rods, duplicate subjects, hidden placeholder blocks, and details that extend beyond the intended silhouette. Do not call a generic box with a few strips production quality.
 - Do not claim success in text unless asset.json, build.py, asset.glb, and scene.blend are actually present.
 
@@ -382,6 +385,35 @@ def _cli_failure_reason(completed: Any) -> str:
     if any(marker in lowered for marker in ("not logged in", "authentication", "unauthorized", "api key", "login required", '"loggedin": false')):
         return "AUTH_REQUIRED"
     return "CLI_FAILED"
+
+
+_DESIGN_VIEWS = ("HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP")
+
+
+def _validated_pipeline_outputs(output: Path, blender_result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, bytes]]:
+    pipeline = blender_result.get("pipeline") if isinstance(blender_result, dict) else None
+    receipt = pipeline.get("result") if isinstance(pipeline, dict) else None
+    process = pipeline.get("process") if isinstance(pipeline, dict) else None
+    if not isinstance(pipeline, dict) or not isinstance(process, dict) or process.get("status") != "PASS" or not isinstance(receipt, dict) or receipt.get("status") != "PASS":
+        raise ProjectError("Blender design pipeline did not pass")
+    views = receipt.get("views")
+    if not isinstance(views, dict) or set(views) != set(_DESIGN_VIEWS):
+        raise ProjectError("Blender design pipeline did not emit all required preview views")
+    renders: dict[str, bytes] = {}
+    for view in _DESIGN_VIEWS:
+        entry = views[view]
+        relative = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(relative, str) or Path(relative).is_absolute() or relative.startswith("../"):
+            raise ProjectError(f"unsafe pipeline render path: {view}")
+        path = (output / relative).resolve()
+        try:
+            path.relative_to(output.resolve())
+        except ValueError as exc:
+            raise ProjectError(f"pipeline render escapes output: {view}") from exc
+        if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0 or path.stat().st_size > 16 * 1024 * 1024:
+            raise ProjectError(f"pipeline render is missing or unsafe: {view}")
+        renders[view] = path.read_bytes()
+    return receipt, renders
 
 
 def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: float = 900,
@@ -525,6 +557,16 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
 
+    pipeline_receipt = None
+    preview_renders = None
+    if quality_profile == "production":
+        try:
+            pipeline_receipt, preview_renders = _validated_pipeline_outputs(output, blender_result)
+        except (OSError, ProjectError, ValueError) as exc:
+            result = {**common, "status": "FAILED", "reason": "BLENDER_PIPELINE_REJECTED", "error": str(exc), "blender": blender_result}
+            (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
+
     try:
         asset = staged_asset
         if not create_asset and target_asset_id and asset["asset_id"] != target_asset_id:
@@ -534,7 +576,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         glb_path, blend_path = output / "asset.glb", output / "scene.blend"
         if glb_path.stat().st_size > 512 * 1024 * 1024 or blend_path.stat().st_size > 1024 * 1024 * 1024:
             raise ProjectError("agent build artifact is too large")
-        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile, reference_pipeline=reference_pipeline, reference_spec_digest=reference_spec.get("digest") if reference_spec else None)
+        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile, reference_pipeline=reference_pipeline, reference_spec_digest=reference_spec.get("digest") if reference_spec else None, pipeline_receipt=pipeline_receipt, preview_renders=preview_renders)
     except (OSError, ValueError, ProjectError) as exc:
         result = {**common, "status": "FAILED", "reason": "OUTPUT_REJECTED", "error": str(exc), "blender": blender_result}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")

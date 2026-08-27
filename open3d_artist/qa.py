@@ -125,6 +125,7 @@ def _glb_thin_spans(gltf: dict[str, Any], data: bytes) -> tuple[str, dict[str, l
     nodes = gltf.get("nodes", [])
     meshes = gltf.get("meshes", [])
     result: dict[str, list[dict[str, Any]]] = {}
+    components_by_part: dict[str, list[dict[str, Any]]] = {}
     try:
         for node in nodes:
             if not isinstance(node, dict) or not isinstance(node.get("mesh"), int):
@@ -186,9 +187,32 @@ def _glb_thin_spans(gltf: dict[str, Any], data: bytes) -> tuple[str, dict[str, l
                             component["max"][axis] = max(component["max"][axis], point[axis])
                 for component in components.values():
                     dimensions = [round(component["max"][axis] - component["min"][axis], 5) for axis in range(3)]
-                    longest, middle, shortest = sorted(dimensions, reverse=True)
-                    if longest >= 2.0 and middle <= 0.18 and shortest <= 0.18:
-                        result.setdefault(part_id, []).append({"triangles": component["triangles"], "dimensions": dimensions})
+                    components_by_part.setdefault(part_id, []).append({"triangles": component["triangles"], "dimensions": dimensions, "min": component["min"], "max": component["max"]})
+        for part_id, part_components in components_by_part.items():
+            for component in part_components:
+                dimensions = component["dimensions"]
+                longest, middle, shortest = sorted(dimensions, reverse=True)
+                if longest < 2.0 or middle > 0.18 or shortest > 0.18:
+                    continue
+                # A fascia/eave is allowed when it overlaps a broad roof mass;
+                # an isolated long rod is the artifact this check is meant to
+                # catch. The old check rejected legitimate supported trim.
+                supported = False
+                for other in part_components:
+                    if other is component:
+                        continue
+                    other_dimensions = other["dimensions"]
+                    other_longest, other_middle, _ = sorted(other_dimensions, reverse=True)
+                    if other_longest < longest * 0.65 or other_middle <= 0.3:
+                        continue
+                    if all(
+                        min(component["max"][axis], other["max"][axis]) + 0.08 >= max(component["min"][axis], other["min"][axis])
+                        for axis in range(3)
+                    ):
+                        supported = True
+                        break
+                if not supported:
+                    result.setdefault(part_id, []).append({"triangles": component["triangles"], "dimensions": dimensions})
     except (IndexError, KeyError, TypeError, ValueError, OverflowError):
         return "UNAVAILABLE", {}
     return "PASS", result

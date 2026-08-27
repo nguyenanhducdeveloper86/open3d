@@ -164,6 +164,7 @@ class Project:
             "qa_status": ref.get("qa_status", "UNKNOWN"),
             "geometry_source": ref.get("geometry_source", "contract"),
             "agent_build": ref.get("agent_build"),
+            "preview_artifacts": ref.get("preview_artifacts", {}),
         }
 
     def _new_workspace(self, ref: dict[str, Any], asset: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -220,7 +221,7 @@ class Project:
         changed = missing
         for index, existing in enumerate(assets):
             if existing.get("asset_id") == current_entry["asset_id"]:
-                if existing.get("glb_artifact") != current_entry["glb_artifact"] or existing.get("qa_artifact") != current_entry.get("qa_artifact") or existing.get("blend_artifact") != current_entry.get("blend_artifact"):
+                if existing.get("glb_artifact") != current_entry["glb_artifact"] or existing.get("qa_artifact") != current_entry.get("qa_artifact") or existing.get("blend_artifact") != current_entry.get("blend_artifact") or existing.get("preview_artifacts") != current_entry.get("preview_artifacts"):
                     assets[index] = current_entry
                     changed = True
                 break
@@ -517,7 +518,9 @@ class Project:
                                 auto_fit_dimensions: bool = False, source: str = "blender",
                                 operation_name: str = "asset.agent_build", quality_profile: str | None = None,
                                 reference_pipeline: str | None = None,
-                                reference_spec_digest: str | None = None) -> dict[str, Any]:
+                                reference_spec_digest: str | None = None,
+                                pipeline_receipt: dict[str, Any] | None = None,
+                                preview_renders: dict[str, bytes] | None = None) -> dict[str, Any]:
         """Adopt a generated asset after contract and GLB validation."""
 
         candidate = normalize_asset(asset)
@@ -543,6 +546,12 @@ class Project:
         glb_id = self.store.put_bytes(glb, kind="glb", metadata={"asset_id": candidate["asset_id"], "contract_artifact": contract_id, "source": source})
         qa_id = self.store.put_json({**report, "artifact_id": glb_id}, kind="qa-report", metadata={"asset_id": candidate["asset_id"], "input_artifact_id": glb_id})
         blend_id = self.store.put_bytes(blend, kind="blend", metadata={"asset_id": candidate["asset_id"], "source": "blender-agent"}) if blend is not None else None
+        pipeline_id = self.store.put_json(pipeline_receipt, kind="blender-pipeline-receipt", metadata={"asset_id": candidate["asset_id"], "source": source}) if pipeline_receipt is not None else None
+        preview_ids: dict[str, str] = {}
+        for view, data in (preview_renders or {}).items():
+            if view not in {"HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"} or not isinstance(data, bytes) or not data:
+                raise ProjectError("invalid Blender preview render")
+            preview_ids[view] = self.store.put_bytes(data, kind="preview-render", metadata={"asset_id": candidate["asset_id"], "view": view, "source": source})
         agent_build = {"agent": agent, "run_id": run_id, "prompt": prompt}
         if workspace:
             agent_build["workspace"] = workspace
@@ -552,6 +561,10 @@ class Project:
             agent_build["reference_pipeline"] = reference_pipeline
         if reference_spec_digest:
             agent_build["reference_spec_digest"] = reference_spec_digest
+        if pipeline_id:
+            agent_build["pipeline_receipt"] = pipeline_id
+        if preview_ids:
+            agent_build["preview_renders"] = preview_ids
         next_ref = {
             **current,
             "asset_id": candidate["asset_id"],
@@ -565,6 +578,8 @@ class Project:
         }
         if blend_id:
             next_ref["blend_artifact"] = blend_id
+        if preview_ids:
+            next_ref["preview_artifacts"] = preview_ids
         result_checkpoint = self._create_checkpoint(next_ref, parent=before_checkpoint, operation_id=operation_id, note=f"after {source_label} generation")
         operation = {
             "schema_version": "0.1.0",
