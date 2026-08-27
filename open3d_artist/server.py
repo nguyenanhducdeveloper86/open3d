@@ -140,8 +140,11 @@ class _Handler(BaseHTTPRequestHandler):
                     if image_urls is not None and not isinstance(image_urls, list):
                         raise ProjectError("image_urls must be a list")
                     value = MeshyPipeline().run(self.server.project, asset_id=body["asset_id"], prompt=body["prompt"], mode=body.get("mode", "text"), kind=body.get("kind", "prop"), image_url=body.get("image_url"), image_urls=image_urls, consent=body.get("consent") is True, quality=body.get("quality", "high"), reference_provider=body.get("reference_provider"), timeout=float(body.get("timeout", 900)), poll_interval=float(body.get("poll_interval", 3)))
-                    if value.get("status") == "PASS" and isinstance(body.get("spawn"), dict):
-                        value["scene_instance"] = self.server.project.add_scene_instance(value["mutation"]["current"]["asset_id"], body["spawn"])
+                    if value.get("status") == "PASS":
+                        current = value.get("mutation", {}).get("current", {})
+                        instances = self.server.project.workspace().get("scene", {}).get("instances", [])
+                        if isinstance(body.get("spawn"), dict) or not any(item.get("asset_id") == current.get("asset_id") for item in instances):
+                            value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))
                 elif path == "/api/generation/all2api-agent":
                     if body.get("consent") is not True:
                         raise ConsentRequired("remote image generation requires explicit consent")
@@ -153,8 +156,11 @@ class _Handler(BaseHTTPRequestHandler):
                     reference = All2ApiImageGenerator().generate(prompt=prompt, quality=body.get("quality", "high"), timeout=min(float(body.get("timeout", 900)), 900))
                     value = run_agent_build(agent, prompt, self.server.project.root, timeout=min(float(body.get("timeout", 900)), 900), reference_image=reference, reference_pipeline="img2threejs", create_asset=True, quality_profile="production")
                     value["generation"] = {key: item for key, item in reference.items() if key != "data"}
-                    if value.get("status") == "PASS" and isinstance(body.get("spawn"), dict):
-                        value["scene_instance"] = self.server.project.add_scene_instance(value["mutation"]["current"]["asset_id"], body["spawn"])
+                    if value.get("status") == "PASS":
+                        current = value.get("mutation", {}).get("current", {})
+                        instances = self.server.project.workspace().get("scene", {}).get("instances", [])
+                        if isinstance(body.get("spawn"), dict) or not any(item.get("asset_id") == current.get("asset_id") for item in instances):
+                            value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))
                 elif path == "/api/blender/run":
                     value = BlenderSandbox(self.server.project.root).run(body["job"], timeout=float(body.get("timeout", 300)), allow_unsafe=body.get("allow_unsafe") is True)
                 elif path == "/api/unity/validate":
