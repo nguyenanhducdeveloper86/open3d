@@ -49,7 +49,7 @@ const state = {
   annotationMode: false,
   annotation: null,
   build: { status: "idle", agent: "", startedAt: 0 },
-  agentMessages: [{ role: "agent", text: "Choose an active LLM agent. Every prompt is executed by Codex, Claude Code, or OpenCode, then Open3D runs Blender and QA. There is no local agent fallback." }],
+  agentMessages: [{ role: "agent", text: "Choose Codex, Claude Code, or OpenCode. Open3D then runs Blender and QA. No local agent fallback." }],
 };
 
 const app = document.querySelector("#app");
@@ -106,7 +106,7 @@ app.innerHTML = `
     <aside class="agent-drawer" id="agent-drawer" aria-hidden="false" aria-labelledby="agent-title">
       <button class="agent-rail-tab" id="agent-rail-tab" type="button" aria-label="Open agent chat"><i class="ph ph-sparkle"></i><span>Agent</span></button>
       <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" type="button" aria-label="Collapse agent chat" title="Collapse agent chat"><i class="ph ph-caret-right"></i></button></header>
-      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>Codex, Claude Code, and OpenCode author the staged build. Open3D runs Blender in the sandbox and replaces the artifact only after GLB/QA checks pass. No local agent fallback.</span></div>
+      <div class="agent-policy"><i class="ph ph-shield-check"></i><span>External LLM → Blender sandbox → GLB + QA. No local agent fallback.</span></div>
       <section class="build-state" id="agent-build-state" hidden aria-live="polite"><div class="build-state-header"><span class="build-state-pulse"></span><div><b>BUILD IN PROGRESS</b><small id="build-state-detail">External LLM is authoring the staged build</small></div><time id="build-state-elapsed">00:00</time></div><div class="build-progress" aria-hidden="true"><span></span></div><p><i class="ph ph-lock-key"></i>Request locked. Keep this window open or close it safely; the build continues and duplicate runs are blocked.</p></section>
       <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>

@@ -179,7 +179,7 @@ button { color: inherit; cursor: pointer; }
 @media (max-width: 760px) { .transform-hud { left: 8px; bottom: 8px; width: calc(100% - 16px); }.transform-values { gap: 9px; }.transform-keys { gap: 7px; } }
 
 /* Agent dock: a real right column that resizes the workspace instead of covering it. */
-:root { --agent-dock-collapsed: 48px; --agent-dock-open: min(400px, 35vw); }
+:root { --agent-dock-collapsed: 48px; --agent-dock-open: min(340px, 32vw); }
 .app-shell { grid-template-columns: 224px minmax(0, 1fr) var(--agent-dock-width, var(--agent-dock-collapsed)); transition: grid-template-columns .22s ease; }
 .app-shell.agent-is-open { --agent-dock-width: var(--agent-dock-open); }
 .agent-backdrop { display: none !important; }
@@ -194,7 +194,28 @@ button { color: inherit; cursor: pointer; }
 .agent-rail-tab span { writing-mode: vertical-rl; transform: rotate(180deg); color: inherit; font: 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
 .agent-drawer .agent-header, .agent-drawer .agent-composer { flex: 0 0 auto; }
 .agent-drawer .agent-thread { min-height: 0; }
+.agent-trigger[aria-expanded="true"] { color: var(--color-surface-cream); border-color: var(--color-lilac); background: rgb(157 149 255 / 8%); }
+.agent-header { min-height: 108px; padding: 20px 18px 17px; gap: 12px; }
+.agent-header h2 { margin: 8px 0 6px; font-size: clamp(27px, 2.2vw, 30px); line-height: .98; }
+.agent-header p { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-header .icon-button { border-color: var(--color-surface-25); color: var(--color-surface-cream); }
+.agent-policy { margin: 12px 18px 0; padding: 10px 11px; border-color: color-mix(in srgb, var(--color-light-green) 24%, var(--color-surface-25)); font-size: 12px; line-height: 1.3; }
+.agent-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 10px; margin: 12px 18px 0; }
+.agent-controls label { grid-column: 1; min-width: 0; }
+.agent-controls #agent-provider-status { grid-column: 2; max-width: 104px; padding-bottom: 9px; }
+.agent-controls #agent-pool-status { grid-column: 1; max-width: none; padding-bottom: 0; }
+.agent-controls .agent-refresh { grid-column: 2; grid-row: 2; align-self: start; }
+.agent-activity { margin: 12px 18px 0; padding: 10px 11px 3px; }
+.agent-thread { gap: 10px; padding: 14px 18px; }
+.agent-message { max-width: 100%; padding: 11px 12px; }
+.agent-message p { font-size: 13px; line-height: 1.35; }
+.agent-composer { gap: 8px; padding: 12px 18px 16px; }
+.agent-composer textarea { min-height: 64px; padding: 10px 11px; font-size: 14px; }
+.agent-composer > div { align-items: end; gap: 8px; min-width: 0; }
+.agent-composer > div .agent-attach-button { flex: 0 0 auto; }
+.agent-composer > div #agent-composer-note { display: -webkit-box; min-width: 0; overflow: hidden; line-height: 1.3; text-overflow: ellipsis; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.agent-composer .primary-action { flex: 0 0 auto; padding: 9px 13px; white-space: nowrap; }
 .build-monitor { right: calc(var(--agent-dock-width, var(--agent-dock-collapsed)) + 20px); }
-@media (max-width: 1080px) { .app-shell { grid-template-columns: 76px minmax(0, 1fr) var(--agent-dock-width, var(--agent-dock-collapsed)); }.app-shell.agent-is-open { --agent-dock-open: min(360px, 35vw); }.app-shell.agent-is-open .search-box { width: min(230px, 28vw); }.app-shell.agent-is-open .top-action span, .app-shell.agent-is-open .validate-button span { display: none; }.app-shell.agent-is-open .top-action, .app-shell.agent-is-open .validate-button { width: 34px; height: 34px; padding: 0; } }
-@media (max-width: 760px) { .app-shell.agent-is-open { --agent-dock-open: min(310px, 40vw); }.build-monitor { right: 12px; } }
+@media (max-width: 1080px) { .app-shell { grid-template-columns: 76px minmax(0, 1fr) var(--agent-dock-width, var(--agent-dock-collapsed)); }.app-shell.agent-is-open { --agent-dock-open: min(340px, 32vw); }.app-shell.agent-is-open .search-box { width: min(230px, 28vw); }.app-shell.agent-is-open .top-action span, .app-shell.agent-is-open .validate-button span { display: none; }.app-shell.agent-is-open .top-action, .app-shell.agent-is-open .validate-button { width: 34px; height: 34px; padding: 0; }.app-shell.agent-is-open .workspace-actions { gap: 6px; }.app-shell.agent-is-open .workspace-actions .top-action, .app-shell.agent-is-open .workspace-actions .primary-action { width: 34px; height: 34px; padding: 0; font-size: 0; }.app-shell.agent-is-open .workspace-actions .top-action span, .app-shell.agent-is-open .workspace-actions kbd { display: none; }.app-shell.agent-is-open .workspace-actions i { font-size: 16px; } }
+@media (max-width: 760px) { .app-shell.agent-is-open { --agent-dock-open: min(320px, 40vw); }.agent-header { min-height: 96px; padding: 17px 16px 14px; }.agent-policy, .agent-controls, .agent-activity { margin-left: 16px; margin-right: 16px; }.agent-thread { padding-left: 16px; padding-right: 16px; }.agent-composer { padding-left: 16px; padding-right: 16px; }.build-monitor { right: 12px; } }
 @media (prefers-reduced-motion: reduce) { .app-shell, .agent-drawer { transition: none; } }
