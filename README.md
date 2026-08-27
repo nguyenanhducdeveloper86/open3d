@@ -11,7 +11,8 @@ The repository ships a runnable v0.1 local production slice:
 - checkpointed semantic-part edits and exact rollback;
 - a small typed MCP stdio surface with no raw shell or Python execution;
 - bounded Blender and Unity worker adapters with explicit runtime boundaries;
-- opt-in Meshy image-to-3D integration with consent and verified GLB storage;
+- opt-in Meshy high-quality text/image/multi-view-to-3D integration with preview/refine, PBR textures, and verified GLB storage;
+- optional Codex imagegen CLI or the local `/Users/ducna/mcp-all2api` browser bridge (ChatGPT/Flow/Grok) for reference images before Meshy;
 - a Three.js desktop viewer served by the local API;
 - checksums, SBOM generation, and GitHub OIDC release provenance;
 - standard-library tests, viewer build, and a clean-room GitHub Actions check.
@@ -40,6 +41,12 @@ python -m open3d_artist edit-part examples/watering-can spout --scale-x 1.2
 python -m open3d_artist export examples/watering-can /tmp/watering-can.glb
 # Agent-authored Blender build (requires Codex/Claude Code/OpenCode and Blender)
 python -m open3d_artist agent-build examples/watering-can --agent codex --prompt "Build a stylized Scandinavian timber house"
+# Meshy text-to-3D: preview -> refine -> PBR/4K GLB -> contract/QA/version
+python -m open3d_artist meshy-generate examples/watering-can --asset-id PROP-SCANDI-HOUSE-001 --prompt "Production-quality stylized Scandinavian timber house" --quality high --consent
+
+# Local mcp-all2api image -> authenticated external agent -> Blender -> GLB/QA
+# Start mcp-all2api first (`npm start`, default http://127.0.0.1:3737), then use
+# the Create 3D asset dialog and choose “All2API image → Agent Blender”.
 
 npm ci --prefix web
 npm run build --prefix web
@@ -80,7 +87,7 @@ scripts/              Release/SBOM helper
 
 ## Status and scope
 
-This is an alpha production slice, not a finished DCC replacement. The procedural GLB generator remains the deterministic baseline. Blender sandboxing needs bubblewrap on Linux, macOS `sandbox-exec`, or an equivalent host policy; Unity needs a licensed Editor and a compatible importer; Meshy needs `MESHY_API_KEY` plus explicit consent. These boundaries are reported as unavailable rather than silently bypassed.
+This is an alpha production slice, not a finished DCC replacement. The procedural GLB generator remains the deterministic baseline. Blender sandboxing needs bubblewrap on Linux, macOS `sandbox-exec`, or an equivalent host policy; Unity needs a licensed Editor and a compatible importer; Meshy needs `MESHY_API_KEY` plus explicit consent. Meshy generation uses `meshy-7`/`latest`, Ultra geometry, PBR, and 4K/8K textures; use `draft` when latency or credits matter. Codex imagegen CLI additionally needs `OPENAI_API_KEY` and the imagegen CLI's `openai` dependency. The local All2API bridge uses `ALL2API_BASE` (default `http://127.0.0.1:3737`) and a connected browser worker; it does not need an API key. These boundaries are reported as unavailable rather than silently bypassed.
 
 The implementation contract is captured in [the v0.1 specs](specs/v0.1/README.md) and the research-derived [architecture](docs/ARCHITECTURE.md). See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [PROVIDER-LICENSE-MATRIX.md](docs/PROVIDER-LICENSE-MATRIX.md) before adding a worker or provider.
 

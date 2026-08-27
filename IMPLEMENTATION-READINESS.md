@@ -15,7 +15,7 @@ The repository is cloneable, licensed, tested, and has a working offline vertica
 | Blender | allowlisted standalone worker, watchdog, output cap, bubblewrap/macOS sandbox policy | adapter ready; host sandbox still required on unsupported OS |
 | Viewer | local API, Three.js GLB viewer, semantic picking, edit/QA/history/provider views | ready |
 | Unity | batch validator source adapter and bounded command builder | adapter ready; licensed Editor/importer required |
-| Providers | procedural catalog and opt-in Meshy image-to-3D adapter with consent/polling/GLB verification | adapter ready; key required |
+| Providers | opt-in Meshy text/image/multi-view pipeline with preview/refine, PBR quality profiles, semantic GLB normalization, plus Codex imagegen CLI and All2API-compatible reference adapters | adapter ready; provider keys required |
 | Release signing/SBOM | tag workflow, checksums, CycloneDX inventory, OIDC provenance attestation | ready on tagged CI release |
 
 The research report's large G2–G10 backlog remains intentionally visible in [BACKLOG.md](BACKLOG.md). The first public milestone is the deterministic baseline; no AI provider is allowed to hide a core pipeline defect.

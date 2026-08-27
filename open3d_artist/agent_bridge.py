@@ -23,7 +23,9 @@ MAX_TIMEOUT = 60.0
 MAX_PLAN_PROMPT = 8 * 1024
 MAX_BUILD_TIMEOUT = 900.0
 MAX_BUILD_PROMPT = 16 * 1024
-MAX_REFERENCE_IMAGE_BYTES = 600 * 1024
+# Generated All2API references can be larger than browser uploads; the HTTP
+# request body remains bounded separately by the local server.
+MAX_REFERENCE_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_REFERENCED_ASSETS = 16
 AGENTS = ("codex", "claude", "opencode")
 POOL_URL_ENV = "OPEN3D_AGENT_POOL_URL"

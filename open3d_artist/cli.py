@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .agent_bridge import run_agent_build
 from .mcp import serve_stdio
-from .providers import MeshyImageTo3D, ProviderError, provider_catalog
+from .providers import MeshyImageTo3D, MeshyPipeline, ProviderError, provider_catalog
 from .production import promote_production, production_agent_receipt, repair_production, run_production, verify_release
 from .project import Project, ProjectError
 from .server import serve
@@ -87,6 +87,18 @@ def build_parser() -> argparse.ArgumentParser:
     provider.add_argument("image_url")
     provider.add_argument("--consent", action="store_true", required=True, help="confirm that the image may be uploaded to Meshy")
     provider.add_argument("--timeout", type=float, default=900)
+
+    generation = commands.add_parser("meshy-generate", help="run the high-quality Meshy text/image pipeline and adopt the GLB")
+    generation.add_argument("project", type=Path)
+    generation.add_argument("--asset-id", required=True)
+    generation.add_argument("--prompt", required=True)
+    generation.add_argument("--mode", choices=("text", "image", "multi_image"), default="text")
+    generation.add_argument("--image-url", action="append", dest="image_urls", help="HTTPS or data image URL; repeat for multi_image")
+    generation.add_argument("--kind", choices=("prop", "environment", "character", "material", "scene"), default="prop")
+    generation.add_argument("--quality", choices=("draft", "high", "hero"), default="high")
+    generation.add_argument("--reference-provider", choices=("codex-cli", "all2api", "openai"))
+    generation.add_argument("--consent", action="store_true", required=True, help="confirm that prompt/images may be sent to remote providers")
+    generation.add_argument("--timeout", type=float, default=900)
 
     production = commands.add_parser("production-run", help="run a checked-in local production brief")
     production.add_argument("--brief", required=True, type=Path)
@@ -172,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
             _json(BlenderSandbox(project.root, blender=args.blender, bwrap=args.bwrap, sandbox_exec=args.sandbox_exec).run(job, timeout=args.timeout, allow_unsafe=args.allow_unsafe))
         elif args.command == "provider-run":
             _json(MeshyImageTo3D().generate(project, image_url=args.image_url, consent=args.consent, timeout=args.timeout))
+        elif args.command == "meshy-generate":
+            _json(MeshyPipeline().run(project, asset_id=args.asset_id, prompt=args.prompt, mode=args.mode, kind=args.kind, image_urls=args.image_urls, consent=args.consent, quality=args.quality, reference_provider=args.reference_provider, timeout=args.timeout))
         elif args.command == "agent-build":
             _json(run_agent_build(args.agent, args.prompt, project.root, timeout=args.timeout))
         return 0

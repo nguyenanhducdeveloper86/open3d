@@ -13,6 +13,8 @@ function readDraft() {
   try { return JSON.parse(localStorage.getItem("open3d.asset-draft") || "null"); } catch { return null; }
 }
 
+const savedDraft = readDraft();
+
 const state = {
   inspect: null,
   report: null,
@@ -41,11 +43,14 @@ const state = {
   theme: "dark",
   busy: false,
   agentProvider: "codex",
+  generationSource: savedDraft?.generation_source || "agent",
+  generationQuality: savedDraft?.quality || "high",
   actionLog: [],
   createOpen: false,
   agentOpen: false,
-  assetDraft: readDraft(),
+  assetDraft: savedDraft,
   referenceImage: null,
+  referenceImages: [],
   agentCreateAssetId: null,
   annotationMode: false,
   annotation: null,
@@ -81,22 +86,22 @@ app.innerHTML = `
     <div class="modal-layer" id="create-layer" hidden>
       <div class="modal-backdrop" data-close-create></div>
       <form class="create-modal" id="create-form" aria-labelledby="create-title">
-        <header class="modal-header"><div><div class="eyebrow">CREATE 3D ASSET</div><h2 id="create-title">Describe what should exist</h2><p>Give an external LLM the brief and reference. It writes the Blender build, then Open3D runs it, validates the GLB, and adds the asset to this project.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
+        <header class="modal-header"><div><div class="eyebrow">CREATE 3D ASSET</div><h2 id="create-title">Describe what should exist</h2><p>Choose a real generation path. Meshy runs preview/refine or image-to-3D at high detail; Codex/Claude/OpenCode run the Blender build through the sandbox.</p></div><button class="icon-button" type="button" id="create-close" aria-label="Close create asset dialog"><i class="ph ph-x"></i></button></header>
         <div class="create-layout">
           <div class="create-form-column">
-            <div class="form-grid"><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH / NOTE</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local path or note" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
+            <div class="form-grid create-options"><label><span>GENERATION ENGINE</span><select id="create-generator"><option value="agent" ${state.generationSource === "agent" ? "selected" : ""}>External agent → Blender</option><option value="meshy-text" ${state.generationSource === "meshy-text" ? "selected" : ""}>Meshy Text → 3D · preview + refine</option><option value="meshy-image" ${state.generationSource === "meshy-image" ? "selected" : ""}>Meshy Image → 3D · one view</option><option value="meshy-multi" ${state.generationSource === "meshy-multi" ? "selected" : ""}>Meshy Multi-view → 3D · 1–4 views</option><option value="codex-image-meshy" ${state.generationSource === "codex-image-meshy" ? "selected" : ""}>Codex image → Meshy 3D</option><option value="all2api-image-meshy" ${state.generationSource === "all2api-image-meshy" ? "selected" : ""}>All2API image → Meshy 3D</option><option value="all2api-image-agent" ${state.generationSource === "all2api-image-agent" ? "selected" : ""}>All2API image → Agent Blender</option><option value="openai-image-meshy" ${state.generationSource === "openai-image-meshy" ? "selected" : ""}>OpenAI image → Meshy 3D</option></select></label><label><span>QUALITY PROFILE</span><select id="create-quality"><option value="draft" ${state.generationQuality === "draft" ? "selected" : ""}>Draft · 2K texture</option><option value="high" ${state.generationQuality === "high" ? "selected" : ""}>High · PBR + 4K</option><option value="hero" ${state.generationQuality === "hero" ? "selected" : ""}>Hero · PBR + 8K</option></select></label><label><span>ASSET ID</span><input id="create-id" name="brief_id" required maxlength="64" value="${escapeHtml(state.assetDraft?.brief_id || "PROP-SCANDI-HOUSE-001")}" /></label><label><span>REFERENCE PATH / NOTE</span><input id="create-reference" name="reference" maxlength="240" placeholder="Optional local path or note" value="${escapeHtml(state.assetDraft?.reference?.path || "")}" /></label></div>
             <label class="form-field"><span>GENERATION PROMPT</span><textarea id="create-prompt" name="prompt" required maxlength="4000" rows="9">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</textarea><small class="field-hint">Describe shape, materials, proportions, semantic parts, and game-ready constraints.</small></label>
             <div class="placement-note" id="create-placement"><i class="ph ph-map-pin"></i><span>Generated asset will be added to the Asset Library and placed at the scene origin.</span></div>
-            <div class="reference-upload"><label class="reference-drop" for="create-reference-file"><input id="create-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /><i class="ph ph-image-square"></i><span id="reference-file-label">Attach reference image</span><small>PNG, JPG, or WebP · compressed before upload</small></label><div class="reference-preview" id="reference-preview" hidden><img id="reference-preview-image" alt="Reference preview" /><div><b id="reference-preview-name"></b><small id="reference-preview-size"></small></div><button class="icon-button" type="button" id="reference-remove" aria-label="Remove reference image"><i class="ph ph-x"></i></button></div></div>
+            <div class="reference-upload"><label class="reference-drop" for="create-reference-file"><input id="create-reference-file" type="file" accept="image/png,image/jpeg,image/webp" multiple /><i class="ph ph-image-square"></i><span id="reference-file-label">Attach reference image</span><small id="reference-file-hint">PNG, JPG, or WebP · compressed before upload</small></label><div class="reference-preview" id="reference-preview" hidden><img id="reference-preview-image" alt="Reference preview" /><div><b id="reference-preview-name"></b><small id="reference-preview-size"></small></div><button class="icon-button" type="button" id="reference-remove" aria-label="Remove reference image"><i class="ph ph-x"></i></button></div></div>
           </div>
           <aside class="create-preview" aria-label="Asset build plan">
             <div class="create-preview-header"><span>LIVE BUILD PLAN</span><b id="create-summary-state">READY</b></div>
             <div class="create-preview-asset"><small>ASSET ID</small><strong id="create-preview-id">PROP-SCANDI-HOUSE-001</strong></div>
             <div class="create-preview-prompt"><small>PROMPT PREVIEW</small><p id="create-preview-prompt">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</p><small>REFERENCE</small><p id="create-preview-reference">${escapeHtml(state.assetDraft?.reference?.path || "No reference attached")}</p></div>
-            <ol class="create-flow" aria-label="Build pipeline"><li class="done"><span>01</span><div><b>Brief</b><small>Prompt + reference</small></div></li><li><span>02</span><div><b>External LLM</b><small id="create-preview-agent">Codex</small></div></li><li><span>03</span><div><b>Blender build</b><small>Author, run, export GLB</small></div></li><li><span>04</span><div><b>QA gate</b><small>Contract + six views</small></div></li></ol>
+            <ol class="create-flow" aria-label="Build pipeline"><li class="done"><span>01</span><div><b>Brief</b><small>Prompt + reference</small></div></li><li><span>02</span><div><b id="create-flow-step-two">Generator</b><small id="create-preview-agent">External agent</small></div></li><li><span>03</span><div><b id="create-flow-step-three">Build + quality</b><small id="create-flow-step-three-copy">Blender build, export GLB</small></div></li><li><span>04</span><div><b>QA gate</b><small>Contract + artifact checks</small></div></li></ol>
             <div class="create-agent-card"><div class="create-card-label">WHO BUILDS IT</div><div class="brief-agent"><label><span>EXTERNAL LLM</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div></div>
             <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
-            <div class="form-boundary"><i class="ph ph-shield-check"></i><p>Only an authenticated external agent can start this build. Open3D never uses a local agent fallback.</p></div>
+            <div class="form-boundary" id="create-boundary"><i class="ph ph-shield-check"></i><p>Remote generation requires explicit consent. Keys stay in the local runtime; Open3D never uses a local-agent fallback.</p></div>
           </aside>
         </div>
         <p class="form-status" id="create-status" aria-live="polite"></p>
@@ -197,8 +202,8 @@ function renderBuildStatus() {
   const running = state.build.status === "running";
   const elapsed = running ? formatElapsed(Date.now() - state.build.startedAt) : "00:00";
   const agent = state.agents.find((item) => item.agent_id === state.build.agent);
-  const label = agent?.label || state.build.agent || "LLM agent";
-  const detail = running ? `${label} is authoring build files · Blender and QA follow automatically` : "";
+  const label = agent?.label || generationLabel(state.build.agent) || state.build.agent || "LLM agent";
+  const detail = running ? `${label} is running the generation pipeline · QA follows automatically` : "";
   const panel = document.querySelector("#agent-build-state");
   const panelDetail = document.querySelector("#build-state-detail");
   const panelElapsed = document.querySelector("#build-state-elapsed");
@@ -220,7 +225,7 @@ function renderBuildStatus() {
     runButton.disabled = running;
     runButton.innerHTML = running ? `<i class="build-spinner"></i>Build running` : runButton.dataset.idleText;
   }
-  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generate", "#validate", "#apply-scale", "#comment-selected", "#annotate-tool", "#orbit-tool", "#grab-tool"].forEach((selector) => {
+  ["#agent-input", "#agent-provider", "#refresh-agents", "#agent-reference-file", "#create-reference-file", "#create-agent", "#create-generator", "#create-quality", "#create-generate", "#validate", "#apply-scale", "#comment-selected", "#annotate-tool", "#orbit-tool", "#grab-tool"].forEach((selector) => {
     const control = document.querySelector(selector);
     if (control) control.disabled = running;
   });
@@ -277,7 +282,8 @@ function persistDraft(draft) {
 }
 
 function renderReferenceImage() {
-  const image = state.referenceImage;
+  const images = state.referenceImages?.length ? state.referenceImages : state.referenceImage ? [state.referenceImage] : [];
+  const image = images[0] || null;
   const drop = document.querySelector(".reference-drop");
   const label = document.querySelector("#reference-file-label");
   const preview = document.querySelector("#reference-preview");
@@ -288,12 +294,12 @@ function renderReferenceImage() {
   const attachmentName = document.querySelector("#agent-attachment-name");
   if (!drop || !label || !preview || !previewImage || !previewName || !previewSize) return;
   drop.classList.toggle("has-file", Boolean(image));
-  label.textContent = image ? "Reference attached" : "Attach reference image";
+  label.textContent = image ? `${images.length} reference${images.length === 1 ? "" : "s"} attached` : "Attach reference image";
   preview.hidden = !image;
   if (image) {
     previewImage.src = image.data;
     previewName.textContent = image.name;
-    previewSize.textContent = `${Math.round(image.data.length / 1024)} KB encoded`;
+    previewSize.textContent = `${Math.round(image.data.length / 1024)} KB encoded${images.length > 1 ? ` · ${images.length} total` : ""}`;
   } else {
     previewImage.removeAttribute("src");
     previewName.textContent = "";
@@ -332,22 +338,32 @@ function compressReferenceImage(dataUrl, fileName) {
 }
 
 async function attachReferenceImage(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const files = [...(event.target.files || [])];
+  if (!files.length) return;
   const status = document.querySelector("#create-status");
   try {
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Use a PNG, JPG, or WebP reference image");
-    let data = await readDataUrl(file);
-    let image = { name: file.name, mime_type: file.type, data };
-    if (file.size > MAX_REFERENCE_IMAGE_BYTES || data.length > MAX_REFERENCE_DATA_URL_LENGTH) image = await compressReferenceImage(data, file.name);
-    if (image.data.length > MAX_REFERENCE_DATA_URL_LENGTH) throw new Error("Reference image is still too large after compression");
-    state.referenceImage = image;
+    const isCreate = event.target.id === "create-reference-file";
+    if (!isCreate) files.splice(1);
+    if (isCreate && document.querySelector("#create-generator")?.value !== "meshy-multi" && files.length > 1) throw new Error("This generation mode accepts one reference image");
+    if (isCreate && files.length > 4) throw new Error("Multi-view generation accepts up to four reference images");
+    const images = [];
+    for (const file of files) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Use PNG, JPG, or WebP reference images");
+      let data = await readDataUrl(file);
+      let image = { name: file.name, mime_type: file.type, data };
+      if (file.size > MAX_REFERENCE_IMAGE_BYTES || data.length > MAX_REFERENCE_DATA_URL_LENGTH) image = await compressReferenceImage(data, file.name);
+      if (image.data.length > MAX_REFERENCE_DATA_URL_LENGTH) throw new Error("Reference image is still too large after compression");
+      images.push(image);
+    }
+    state.referenceImages = isCreate ? images : [];
+    state.referenceImage = images[0];
     renderReferenceImage();
-    if (status) status.textContent = `Attached ${file.name}. It will be staged for the external LLM.`;
-    else toast(`Attached ${file.name}`, "success");
+    if (status) status.textContent = `Attached ${images.length} reference image${images.length === 1 ? "" : "s"}.`;
+    else toast(`Attached ${images.length} reference image${images.length === 1 ? "" : "s"}`, "success");
   } catch (error) {
     event.target.value = "";
     state.referenceImage = null;
+    state.referenceImages = [];
     renderReferenceImage();
     if (status) status.textContent = error.message;
     else toast(error.message, "error");
@@ -356,6 +372,7 @@ async function attachReferenceImage(event) {
 
 function removeReferenceImage() {
   state.referenceImage = null;
+  state.referenceImages = [];
   ["#create-reference-file", "#agent-reference-file"].forEach((selector) => {
     const input = document.querySelector(selector);
     if (input) input.value = "";
@@ -367,7 +384,10 @@ function readBriefForm() {
   const id = document.querySelector("#create-id").value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
   const prompt = document.querySelector("#create-prompt").value.trim();
   const referencePath = document.querySelector("#create-reference").value.trim();
-  return { id, prompt, referencePath };
+  const generator = document.querySelector("#create-generator")?.value || state.generationSource || "agent";
+  const quality = document.querySelector("#create-quality")?.value || state.generationQuality || "high";
+  const references = state.referenceImages?.length ? state.referenceImages : state.referenceImage ? [state.referenceImage] : [];
+  return { id, prompt, referencePath, generator, quality, references };
 }
 
 function setInspectorTab(tab) {
@@ -382,13 +402,66 @@ function setInspectorTab(tab) {
   document.querySelector('#contract-pane')?.toggleAttribute('hidden', tab !== 'contract');
 }
 
+function generationLabel(source) {
+  return ({
+    agent: state.agents.find((item) => item.agent_id === state.agentProvider)?.label || "External agent",
+    "meshy-text": "Meshy Text → 3D",
+    "meshy-image": "Meshy Image → 3D",
+    "meshy-multi": "Meshy Multi-view → 3D",
+    "codex-image-meshy": "Codex Image → Meshy 3D",
+    "all2api-image-meshy": "All2API Image → Meshy 3D",
+    "all2api-image-agent": "All2API Image → Agent Blender",
+    "openai-image-meshy": "OpenAI Image → Meshy 3D",
+  })[source] || source;
+}
+
+function providerConfigured(providerId) {
+  return state.providers.some((provider) => provider.provider_id === providerId && provider.configured);
+}
+
+function createGeneratorReady(source) {
+  if (source === "agent") return state.agents.some((agent) => agent.agent_id === state.agentProvider && agent.status === "ACTIVE");
+  if (source === "meshy-text") return providerConfigured("meshy-text-to-3d");
+  if (source === "meshy-image") return providerConfigured("meshy-image-to-3d");
+  if (source === "meshy-multi") return providerConfigured("meshy-multi-image-to-3d");
+  if (source === "codex-image-meshy") return providerConfigured("meshy-image-to-3d") && providerConfigured("codex-cli-image");
+  if (source === "all2api-image-meshy") return providerConfigured("meshy-image-to-3d") && providerConfigured("all2api-image");
+  if (source === "all2api-image-agent") return providerConfigured("all2api-image") && state.agents.some((agent) => agent.agent_id === state.agentProvider && agent.status === "ACTIVE");
+  if (source === "openai-image-meshy") return providerConfigured("meshy-image-to-3d") && providerConfigured("openai-image");
+  return false;
+}
+
+function createGeneratorNeedsImage(source) {
+  return ["meshy-image", "meshy-multi"].includes(source);
+}
+
+function syncCreateGenerator() {
+  const source = document.querySelector("#create-generator")?.value || state.generationSource || "agent";
+  const multi = source === "meshy-multi";
+  const input = document.querySelector("#create-reference-file");
+  const agentCard = document.querySelector(".create-agent-card");
+  const hint = document.querySelector("#reference-file-hint");
+  const boundary = document.querySelector("#create-boundary p");
+  if (input) input.multiple = multi;
+  if (agentCard) agentCard.hidden = !["agent", "all2api-image-agent"].includes(source);
+  if (hint) hint.textContent = source === "agent" ? "PNG, JPG, or WebP · attached to the external agent" : source === "all2api-image-agent" ? "Prompt → All2API reference image → selected external agent" : multi ? "PNG, JPG, or WebP · first image is the primary view · up to 4" : createGeneratorNeedsImage(source) ? "PNG, JPG, or WebP · one primary view" : "Optional · Meshy uses the text prompt directly";
+  if (boundary) boundary.textContent = source === "agent" ? "Only an authenticated external agent can start this build. Open3D runs Blender and QA with no local fallback." : source === "all2api-image-agent" ? "All2API creates the reference image, then the selected external agent runs Blender and QA. No local fallback." : "Remote generation requires explicit consent. Keys stay in the local runtime; Open3D adopts only a verified GLB.";
+  const quality = document.querySelector("#create-quality");
+  if (quality) quality.disabled = source === "agent";
+  state.generationSource = source;
+  renderCreateSummary();
+}
+
 function renderCreateSummary() {
   const id = document.querySelector("#create-id")?.value.trim().toUpperCase() || "PROP-SCANDI-HOUSE-001";
   const prompt = document.querySelector("#create-prompt")?.value.trim() || "Add a production brief to preview the build.";
+  const source = document.querySelector("#create-generator")?.value || state.generationSource || "agent";
   const agent = state.agents.find((item) => item.agent_id === state.agentProvider);
   const running = state.build.status === "running";
-  const ready = agent?.status === "ACTIVE";
-  const status = running ? "BUILD RUNNING" : ready ? "READY TO BUILD" : agent?.status === "CHECKING" ? "CHECKING AGENT" : "AUTH REQUIRED";
+  const ready = createGeneratorReady(source);
+  const references = state.referenceImages?.length ? state.referenceImages : state.referenceImage ? [state.referenceImage] : [];
+  const hasRequiredReference = !createGeneratorNeedsImage(source) || references.length > 0;
+  const status = running ? "BUILD RUNNING" : !hasRequiredReference ? "REFERENCE REQUIRED" : ready ? "READY TO BUILD" : source === "agent" ? agent?.status === "CHECKING" ? "CHECKING AGENT" : "AUTH REQUIRED" : "PROVIDER KEY REQUIRED";
   const reference = document.querySelector("#create-reference")?.value.trim();
   const idNode = document.querySelector("#create-preview-id");
   const promptNode = document.querySelector("#create-preview-prompt");
@@ -397,22 +470,28 @@ function renderCreateSummary() {
   const referenceNode = document.querySelector("#create-preview-reference");
   if (idNode) idNode.textContent = id;
   if (promptNode) promptNode.textContent = prompt;
-  if (agentNode) agentNode.textContent = agent?.label || state.agentProvider;
-  if (referenceNode) referenceNode.textContent = reference || (state.referenceImage ? `Attached image · ${state.referenceImage.name}` : "No reference attached");
+  if (agentNode) agentNode.textContent = generationLabel(source);
+  if (referenceNode) referenceNode.textContent = reference || (references.length ? `${references.length} attached image${references.length === 1 ? "" : "s"}` : source === "agent" ? "No reference attached" : "Prompt-driven");
   if (statusNode) {
     statusNode.textContent = status;
     statusNode.className = running ? "running" : ready ? "ready" : "blocked";
   }
-  document.querySelectorAll(".create-flow li").forEach((step, index) => step.classList.toggle("active", running && index === 1));
+  const stepTwo = document.querySelector("#create-flow-step-two");
+  const stepThree = document.querySelector("#create-flow-step-three");
+  const stepThreeCopy = document.querySelector("#create-flow-step-three-copy");
+  if (stepTwo) stepTwo.textContent = source === "agent" ? "External LLM" : source === "all2api-image-agent" ? "All2API image" : "AI generation";
+  if (stepThree) stepThree.textContent = ["agent", "all2api-image-agent"].includes(source) ? "Blender build" : "Refine + PBR";
+  if (stepThreeCopy) stepThreeCopy.textContent = source === "agent" ? "Author, run, export GLB" : source === "all2api-image-agent" ? "Reference → agent → GLB" : source === "meshy-text" ? "Preview → refine → GLB" : "Texture, normalize, export GLB";
+  document.querySelectorAll(".create-flow li").forEach((step, index) => step.classList.toggle("active", running && index > 0 && index < 3));
   const generate = document.querySelector("#create-generate");
-  if (generate) generate.disabled = running || !ready;
+  if (generate) { generate.disabled = running || !ready || !hasRequiredReference; generate.innerHTML = source === "agent" ? `<i class="ph ph-sparkle"></i>Generate with agent` : `<i class="ph ph-sparkle"></i>Generate high-quality 3D`; }
 }
 
 function saveBriefState(brief, generation = "draft-only") {
   state.assetDraft = {
     schema_version: "0.1.0", brief_id: brief.id, prompt: brief.prompt,
     reference: { path: brief.referencePath, kind: brief.referencePath || state.referenceImage ? "attached" : "not-attached", image: state.referenceImage ? { name: state.referenceImage.name, mime_type: state.referenceImage.mime_type } : null },
-    views: REQUIRED_VIEWS, generation,
+    views: REQUIRED_VIEWS, generation, generation_source: brief.generator, quality: brief.quality,
   };
   persistDraft(state.assetDraft);
 }
@@ -439,6 +518,7 @@ function openCreateAsset(spawnPosition = null) {
     ? `<i class="ph ph-map-pin"></i><span>Spawn point set: ${state.pendingSpawn.position.x}, ${state.pendingSpawn.position.y}, ${state.pendingSpawn.position.z}</span>`
     : `<i class="ph ph-books"></i><span>Generated asset will be added to the Asset Library and placed at the scene origin.</span>`;
   syncCreateAgent();
+  syncCreateGenerator();
   renderReferenceImage();
   renderCreateSummary();
   document.querySelector("#create-id").focus();
@@ -728,11 +808,60 @@ async function generateAssetFromBrief() {
   const brief = readBriefForm();
   const status = document.querySelector("#create-status");
   if (!brief.id || !brief.prompt) { status.textContent = "Asset ID and prompt are required."; return; }
+  if (createGeneratorNeedsImage(brief.generator) && !brief.references.length) { status.textContent = "Attach at least one reference image for this mode."; return; }
   const spawn = state.pendingSpawn;
+  state.generationSource = brief.generator;
+  state.generationQuality = brief.quality;
   saveBriefState(brief, "generation-requested");
   closeCreateAsset();
+  if (brief.generator === "agent") {
+    state.referenceImages = [];
+    openAgent();
+    await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, createAssetId: brief.id, spawn, referencePath: brief.referencePath });
+    return;
+  }
+  const label = generationLabel(brief.generator);
+  const all2apiAgent = brief.generator === "all2api-image-agent";
+  const actionId = beginAction(`${label} request`, "Starting remote generation pipeline");
+  addAgentMessage("user", `Create ${brief.id} with ${label}.\n\n${brief.prompt}`);
+  state.agentCreateAssetId = brief.id;
   openAgent();
-  await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, createAssetId: brief.id, spawn, referencePath: brief.referencePath });
+  startBuildStatus(brief.generator);
+  addAgentMessage("agent", all2apiAgent ? `${label} started. All2API will create a reference image, then ${state.agentProvider} will run Blender and QA.` : `${label} started. The pipeline will generate/refine the asset, normalize semantic parts, verify the GLB, and refresh this workspace.`);
+  updateAction(actionId, "running", all2apiAgent ? "Generating All2API reference / external Blender build" : "Generating reference / Meshy geometry");
+  try {
+    const mode = brief.generator === "meshy-multi" ? "multi_image" : brief.generator === "meshy-image" ? "image" : "text";
+    const request = all2apiAgent
+      ? { asset_id: brief.id, agent: state.agentProvider, prompt: brief.prompt, quality: brief.quality, consent: true, timeout: 900 }
+      : { asset_id: brief.id, prompt: brief.prompt, mode, quality: brief.quality, consent: true, timeout: 900 };
+    if (!all2apiAgent && (mode === "image" || mode === "multi_image")) request.image_urls = brief.references.map((image) => image.data);
+    if (!all2apiAgent && brief.generator === "codex-image-meshy") request.reference_provider = "codex-cli";
+    if (!all2apiAgent && brief.generator === "all2api-image-meshy") request.reference_provider = "all2api";
+    if (!all2apiAgent && brief.generator === "openai-image-meshy") request.reference_provider = "openai";
+    if (spawn) request.spawn = spawn;
+    const result = await api(all2apiAgent ? "/api/generation/all2api-agent" : "/api/generation/meshy", { method: "POST", body: JSON.stringify(request) });
+    const output = [result.error, result.reason].filter(Boolean).join("\n\n").slice(0, 6000) || "No generation output";
+    if (result.status === "PASS") {
+      updateAction(actionId, "running", "GLB verified · refreshing preview and version history");
+      await refreshAfterMutation();
+      state.agentCreateAssetId = null;
+      renderAgentTarget();
+      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
+      addAgentMessage("agent", `${label} completed. The new GLB, semantic contract, QA report, and asset version are current in the workspace.`);
+      toast("High-quality 3D generation completed", "success");
+    } else {
+      updateAction(actionId, "failed", result.reason || "Generation failed");
+      addAgentMessage("agent", `${label} · ${result.status}\n\n${output}`);
+    }
+  } catch (error) {
+    updateAction(actionId, "failed", error.message);
+    addAgentMessage("agent", `${label} could not complete: ${error.message}`);
+  } finally {
+    state.referenceImage = null;
+    state.referenceImages = [];
+    renderReferenceImage();
+    stopBuildStatus();
+  }
 }
 
 async function applyAgentPatch(index) {
@@ -1634,6 +1763,8 @@ document.querySelector("#agent-reference-file").addEventListener("change", attac
 document.querySelector("#reference-remove").addEventListener("click", removeReferenceImage);
 document.querySelector("#agent-attachment-remove").addEventListener("click", removeReferenceImage);
 document.querySelectorAll("#create-id, #create-prompt, #create-reference").forEach((input) => input.addEventListener("input", renderCreateSummary));
+document.querySelector("#create-generator").addEventListener("change", (event) => { state.generationSource = event.target.value; if (event.target.value !== "meshy-multi" && state.referenceImages.length > 1) { state.referenceImages = state.referenceImages.slice(0, 1); state.referenceImage = state.referenceImages[0] || null; } syncCreateGenerator(); renderReferenceImage(); });
+document.querySelector("#create-quality").addEventListener("change", (event) => { state.generationQuality = event.target.value; renderCreateSummary(); });
 document.querySelector("#create-agent").addEventListener("change", (event) => { state.agentProvider = event.target.value; renderAgentProviderStatus(); syncCreateAgent(); renderCreateSummary(); });
 document.querySelector("#create-close").addEventListener("click", closeCreateAsset);
 document.querySelector("#create-cancel").addEventListener("click", closeCreateAsset);
