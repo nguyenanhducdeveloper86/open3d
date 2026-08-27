@@ -46,6 +46,7 @@ const state = {
   agentOpen: false,
   assetDraft: readDraft(),
   referenceImage: null,
+  agentCreateAssetId: null,
   annotationMode: false,
   annotation: null,
   build: { status: "idle", agent: "", startedAt: 0 },
@@ -142,6 +143,23 @@ function escapeHtml(value) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function createAssetIdFromPrompt(text) {
+  const value = String(text || "");
+  const patterns = [
+    /\b(?:create|generate|build)\s+(?:a\s+)?new\s+asset\b[\s\S]{0,40}?\basset[_ -]?id\s*[:=]?\s*([A-Za-z][A-Za-z0-9_-]*)/i,
+    /\b(?:tạo|tao)\s+(?:một\s+)?asset\s+mới[\s\S]{0,40}?\basset[_ -]?id\s*[:=]?\s*([A-Za-z][A-Za-z0-9_-]*)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(value);
+    if (!match) continue;
+    let assetId = match[1];
+    const continuation = value.slice(match.index + match[0].length).match(/^[ \t\r\n]+(\d[A-Za-z0-9_-]*)/);
+    if (assetId.endsWith("-") && continuation) assetId += continuation[1];
+    return assetId;
+  }
+  return null;
 }
 
 function beginAction(label, detail = "") {
@@ -462,22 +480,18 @@ function workspaceAssetById(assetId) {
 }
 
 function extractAssetMentions(text) {
-  const mentions = [];
-  const seen = new Set();
-  for (const match of String(text || "").matchAll(/@([A-Za-z0-9][A-Za-z0-9_-]*)/g)) {
-    const asset = workspaceAssetById(match[1]);
-    if (asset && !seen.has(asset.asset_id)) {
-      seen.add(asset.asset_id);
-      mentions.push(asset);
-    }
-  }
-  return mentions;
+  const value = String(text || "");
+  return (state.workspace?.assets || []).map((asset) => {
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_-])@?${escapeRegExp(asset.asset_id)}(?=$|[^A-Za-z0-9_-])`, "i");
+    const match = pattern.exec(value);
+    return match ? { asset, index: match.index + match[1].length } : null;
+  }).filter(Boolean).sort((left, right) => left.index - right.index || right.asset.asset_id.length - left.asset.asset_id.length).map((item) => item.asset);
 }
 
 function removeAgentMention(assetId) {
   const input = document.querySelector("#agent-input");
   if (!input) return;
-  input.value = input.value.replace(new RegExp(`@${escapeRegExp(assetId)}(?=$|\\s|[.,!?;:)])`, "gi"), "").replace(/[ \t]{2,}/g, " ").trim();
+  input.value = input.value.replace(new RegExp(`@?${escapeRegExp(assetId)}(?=$|\\s|[.,!?;:)])`, "gi"), "").replace(/[ \t]{2,}/g, " ").trim();
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.focus();
 }
@@ -556,6 +570,16 @@ function selectedAgentTarget() {
 }
 
 function renderAgentTarget() {
+  if (state.agentCreateAssetId) {
+    const context = document.querySelector("#agent-context");
+    const note = document.querySelector("#agent-composer-note");
+    const input = document.querySelector("#agent-input");
+    if (context) context.textContent = `New asset · ${state.agentCreateAssetId}`;
+    if (note) note.textContent = `Create ${state.agentCreateAssetId} · LLM → Blender → QA`;
+    if (input && !input.value.trim()) input.placeholder = `Describe ${state.agentCreateAssetId}`;
+    renderAgentMentions();
+    return;
+  }
   const target = selectedAgentTarget();
   const marked = state.annotation ? " · marked area" : "";
   const asset = selectedWorkspaceAsset();
@@ -626,7 +650,10 @@ async function executeAgentBuild(text, options = {}) {
   }
   const provider = state.agents.find((item) => item.agent_id === state.agentProvider);
   const label = provider?.label || state.agentProvider;
-  const mentionedAssets = options.create ? [] : extractAssetMentions(text);
+  const createAssetId = options.create ? options.createAssetId || createAssetIdFromPrompt(text) : null;
+  state.agentCreateAssetId = createAssetId;
+  renderAgentTarget();
+  const mentionedAssets = extractAssetMentions(text).filter((asset) => asset.asset_id !== createAssetId);
   const mentionedAssetId = mentionedAssets[0]?.asset_id || "";
   const selectedTarget = options.create ? null : selectedAgentTarget();
   const target = mentionedAssetId && selectedTarget?.parts?.some((part) => part.assetId !== mentionedAssetId) ? null : selectedTarget;
@@ -665,10 +692,12 @@ async function executeAgentBuild(text, options = {}) {
     if (options.spawn) request.spawn = options.spawn;
     if (attachment) request.reference_image = attachment;
     const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify(request) });
-    const output = (result.cli?.stdout || result.cli?.stderr || result.error || result.reason || "No build output").slice(0, 6000);
+    const output = [result.error, result.reason, result.cli?.stderr, result.cli?.stdout].filter(Boolean).join("\n\n").slice(0, 6000) || "No build output";
     if (result.status === "PASS") {
       updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
       await refreshAfterMutation();
+      state.agentCreateAssetId = null;
+      renderAgentTarget();
       updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
       addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the sandbox"}; the GLB, contract, checkpoint, and QA report are now current.`);
       toast("LLM Blender build completed", "success");
@@ -691,7 +720,8 @@ async function submitAgentMessage(event) {
   if (!text) return;
   input.value = "";
   renderAgentMentions();
-  await executeAgentBuild(text);
+  const createAssetId = createAssetIdFromPrompt(text);
+  await executeAgentBuild(text, createAssetId ? { create: true, createAssetId } : {});
 }
 
 async function generateAssetFromBrief() {
@@ -702,7 +732,7 @@ async function generateAssetFromBrief() {
   saveBriefState(brief, "generation-requested");
   closeCreateAsset();
   openAgent();
-  await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, spawn, referencePath: brief.referencePath });
+  await executeAgentBuild(`Create a new asset with asset_id ${brief.id}. ${brief.prompt}`, { create: true, createAssetId: brief.id, spawn, referencePath: brief.referencePath });
 }
 
 async function applyAgentPatch(index) {
@@ -766,7 +796,7 @@ async function loadState() {
     }
     state.selectedAssetId = inspect.current.asset_id;
     state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null;
-    state.selectedPart = inspect.contract.parts[0]?.part_id || null;
+    state.selectedPart = null;
     setRuntimeStatus("READY");
     hydrateHeader();
     renderView();
@@ -933,7 +963,7 @@ function selectWorkspaceAsset(assetId) {
   if (!asset) return;
   state.selectedAssetId = asset.asset_id;
   state.selectedInstanceId = selectedAssetInstances(asset.asset_id)[0]?.instance_id || null;
-  state.selectedPart = asset.contract.parts[0]?.part_id || null;
+  state.selectedPart = null;
   state.selectedParts = [];
   state.annotation = null;
   state.annotationMode = false;
@@ -956,7 +986,7 @@ async function addAssetToScene(assetId, position = null) {
     state.workspace = await api("/api/workspace");
     state.selectedAssetId = assetId;
     state.selectedInstanceId = selectedAssetInstances(assetId).at(-1)?.instance_id || null;
-    state.selectedPart = state.workspace.assets.find((asset) => asset.asset_id === assetId)?.contract.parts[0]?.part_id || null;
+    state.selectedPart = null;
     state.selectedParts = [];
     renderView();
     await loadArtifact();
@@ -1590,7 +1620,7 @@ async function applyScale() {
   try { state.busy = true; await api("/api/edit-part", { method: "POST", body: JSON.stringify({ part_id: partId, scale_x: values.x, scale_y: values.y, scale_z: values.z }) }); toast(`Scaled ${partId}`, "success"); await refreshAfterMutation(); } catch (error) { toast(error.message, "error"); } finally { state.busy = false; }
 }
 
-async function refreshAfterMutation() { const [inspect, report, history, workspace, versions] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace"), api("/api/versions")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.versions = versions; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = selectedAssetContract()?.parts[0]?.part_id || null; state.selectedParts = []; hydrateHeader(); renderView(); await loadArtifact(); }
+async function refreshAfterMutation() { const previousAssetId = state.selectedAssetId; const previousPart = state.selectedPart; const [inspect, report, history, workspace, versions] = await Promise.all([api("/api/inspect"), api("/api/validate"), api("/api/history"), api("/api/workspace"), api("/api/versions")]); state.inspect = inspect; state.report = report; state.history = history; state.workspace = workspace; state.versions = versions; state.selectedAssetId = inspect.current.asset_id; state.selectedInstanceId = workspace.scene?.instances?.find((instance) => instance.asset_id === state.selectedAssetId)?.instance_id || null; state.selectedPart = previousAssetId === state.selectedAssetId && selectedAssetContract()?.parts.some((part) => part.part_id === previousPart) ? previousPart : null; state.selectedParts = []; hydrateHeader(); renderView(); await loadArtifact(); }
 
 document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", () => { state.activeView = item.dataset.view; renderView(); if (state.activeView === "workspace") loadArtifact(); }));
 document.querySelector("#validate").addEventListener("click", runQa);

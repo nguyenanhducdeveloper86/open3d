@@ -155,10 +155,12 @@ class _Handler(BaseHTTPRequestHandler):
                 elif path == "/api/agent/plan":
                     value = run_agent_plan(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 30)))
                 elif path == "/api/agent/build":
-                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"), referenced_asset_ids=body.get("referenced_asset_ids"))
+                    value = run_agent_build(body["agent"], body["prompt"], self.server.project.root, timeout=float(body.get("timeout", 900)), reference_image=body.get("reference_image"), target_asset_id=body.get("asset_id"), referenced_asset_ids=body.get("referenced_asset_ids"), create_asset=body.get("create_asset") is True)
                     if value.get("status") == "PASS" and (isinstance(body.get("spawn"), dict) or body.get("create_asset") is True):
                         current = value.get("mutation", {}).get("current", {})
-                        value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))
+                        instances = self.server.project.workspace().get("scene", {}).get("instances", [])
+                        if isinstance(body.get("spawn"), dict) or not any(item.get("asset_id") == current.get("asset_id") for item in instances):
+                            value["scene_instance"] = self.server.project.add_scene_instance(current["asset_id"], body.get("spawn"))
                 elif path == "/api/scene/instances":
                     value = self.server.project.add_scene_instance(body["asset_id"], body.get("transform"), instance_id=body.get("instance_id"))
                 elif path.startswith("/api/scene/instances/") and path.endswith("/update"):

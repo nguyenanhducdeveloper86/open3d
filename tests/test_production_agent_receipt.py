@@ -61,7 +61,7 @@ class ProductionAgentReceiptTests(unittest.TestCase):
             root.mkdir()
             (root / "asset.yaml").write_text(json.dumps(source), encoding="utf-8")
             project = Project.init(root, root / "asset.yaml")
-            result = run_agent_build("codex", "build the requested prop", root, runner=fake_agent, which=lambda _: "/bin/fake", worker=FakeWorker(), referenced_asset_ids=["AGENT-SOURCE-001"])
+            result = run_agent_build("codex", "build the requested prop", root, runner=fake_agent, which=lambda _: "/bin/fake", worker=FakeWorker(), referenced_asset_ids=["AGENT-SOURCE-001"], create_asset=True)
             self.assertEqual(result["status"], "PASS")
             self.assertFalse(result["project_state_unchanged"])
             self.assertIn("dimensions_autofit", result["mutation"])
@@ -98,6 +98,33 @@ class ProductionAgentReceiptTests(unittest.TestCase):
             result = run_agent_build("codex", "build from the reference", root, runner=fake_agent, which=lambda _: "/bin/fake", worker=FakeWorker(), reference_image={"name": "house.png", "mime_type": "image/png", "data": "data:image/png;base64," + base64.b64encode(png).decode()})
             self.assertEqual(result["status"], "PASS")
             self.assertNotIn("data", result["reference_image"])
+
+    def test_agent_build_rejects_output_for_the_selected_edit_target(self):
+        source = {
+            "schema_version": "0.1.0", "asset_id": "AGENT-SOURCE-001", "kind": "prop", "units": "m",
+            "dimensions": {"width": 2, "depth": 2, "height": 2}, "parts": [{"part_id": "body", "role": "body"}],
+            "geometry": {"triangle_budget": {"max": 1000}, "primitives": [{"part_id": "body", "type": "box", "size": {"x": 1, "y": 1, "z": 1}}]},
+        }
+        generated = {**source, "asset_id": "AGENT-WRONG-001"}
+
+        class FakeWorker:
+            def run_agent_build(self, script, contract, output, *, timeout):
+                self.called = True
+                return {"sandbox": "fake", "process": {"status": "PASS", "returncode": 0, "duration_ms": 1, "output": ""}}
+
+        def fake_agent(argv, **kwargs):
+            workspace = Path(kwargs["cwd"])
+            (workspace / "asset.json").write_text(json.dumps(generated), encoding="utf-8")
+            (workspace / "build.py").write_text("# wrong target", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout=b"files ready", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / "asset.yaml").write_text(json.dumps(source), encoding="utf-8")
+            project = Project.init(root, root / "asset.yaml")
+            result = run_agent_build("codex", "edit the selected prop", root, runner=fake_agent, which=lambda _: "/bin/fake", target_asset_id=source["asset_id"], worker=FakeWorker())
+            self.assertEqual(result["reason"], "TARGET_ASSET_MISMATCH")
+            self.assertTrue(result["project_state_unchanged"])
+            self.assertEqual(project.current()["asset_id"], source["asset_id"])
 
     def test_plan_bridge_is_read_only_and_bounded_to_fixed_agent_cli(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from open3d_artist.geometry import generate_glb
 from open3d_artist.project import Project
+from open3d_artist.qa import _glb_mesh_stats
 
 
 ASSET = {
@@ -22,6 +23,19 @@ ASSET = {
 
 
 class CoreWorkflowTest(unittest.TestCase):
+    def test_glb_bounds_include_node_transforms(self):
+        gltf = {
+            "accessors": [{"min": [-1, -2, -3], "max": [1, 2, 3], "count": 36}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 0}]}],
+            "nodes": [{"mesh": 0, "translation": [10, 20, 30]}],
+        }
+        stats = _glb_mesh_stats(gltf)
+        self.assertEqual(stats["bounds"]["min"], [9.0, 18.0, 27.0])
+        self.assertEqual(stats["bounds"]["max"], [11.0, 22.0, 33.0])
+        self.assertEqual(stats["bounds"]["size"], [2.0, 4.0, 6.0])
+        blender_stats = _glb_mesh_stats({**gltf, "asset": {"generator": "Khronos glTF Blender I/O v5.2.39"}})
+        self.assertEqual(blender_stats["bounds"]["size"], [2.0, 6.0, 4.0])
+
     def test_edit_validate_and_exact_rollback(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "asset"

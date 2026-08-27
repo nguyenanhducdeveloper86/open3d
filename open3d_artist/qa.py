@@ -24,6 +24,32 @@ def _check(check_id: str, passed: bool, expected: Any, actual: Any, *, affected:
     return result
 
 
+def _matrix_multiply(left: list[float], right: list[float]) -> list[float]:
+    return [sum(left[row * 4 + index] * right[index * 4 + column] for index in range(4)) for row in range(4) for column in range(4)]
+
+
+def _node_matrix(node: dict[str, Any]) -> list[float]:
+    matrix = node.get("matrix")
+    if isinstance(matrix, list) and len(matrix) == 16:
+        return [float(matrix[column * 4 + row]) for row in range(4) for column in range(4)]
+    translation = node.get("translation", [0.0, 0.0, 0.0])
+    scale = node.get("scale", [1.0, 1.0, 1.0])
+    rotation = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    tx, ty, tz = (float(value) for value in translation)
+    sx, sy, sz = (float(value) for value in scale)
+    x, y, z, w = (float(value) for value in rotation)
+    return [
+        (1 - 2 * (y * y + z * z)) * sx, (2 * (x * y - z * w)) * sy, (2 * (x * z + y * w)) * sz, tx,
+        (2 * (x * y + z * w)) * sx, (1 - 2 * (x * x + z * z)) * sy, (2 * (y * z - x * w)) * sz, ty,
+        (2 * (x * z - y * w)) * sx, (2 * (y * z + x * w)) * sy, (1 - 2 * (x * x + y * y)) * sz, tz,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+
+
+def _transform_point(matrix: list[float], point: list[float]) -> list[float]:
+    return [sum(matrix[row * 4 + index] * (point[index] if index < 3 else 1.0) for index in range(4)) for row in range(3)]
+
+
 def _glb_mesh_stats(gltf: dict[str, Any]) -> dict[str, Any]:
     """Read bounded geometry stats from glTF accessors without decoding mesh data."""
 
@@ -33,9 +59,31 @@ def _glb_mesh_stats(gltf: dict[str, Any]) -> dict[str, Any]:
     triangles = 0
     mins: list[float] | None = None
     maxs: list[float] | None = None
-    for node in gltf.get("nodes", []):
+    nodes = gltf.get("nodes", [])
+    parents: dict[int, int] = {}
+    for parent_index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            continue
+        for child_index in node.get("children", []):
+            if isinstance(child_index, int):
+                parents[child_index] = parent_index
+
+    world_matrices: dict[int, list[float]] = {}
+
+    def world_matrix(index: int) -> list[float]:
+        if index in world_matrices:
+            return world_matrices[index]
+        node = nodes[index] if 0 <= index < len(nodes) and isinstance(nodes[index], dict) else {}
+        local = _node_matrix(node)
+        parent = parents.get(index)
+        result = _matrix_multiply(world_matrix(parent), local) if parent is not None and parent != index else local
+        world_matrices[index] = result
+        return result
+
+    for node_index, node in enumerate(nodes):
         if not isinstance(node, dict) or not isinstance(node.get("mesh"), int):
             continue
+        matrix = world_matrix(node_index)
         node_extras = node.get("extras", {}) if isinstance(node.get("extras", {}), dict) else {}
         node_open3d = node_extras.get("open3d", {}) if isinstance(node_extras.get("open3d", {}), dict) else {}
         part_id = node_open3d.get("part_id") or node_extras.get("open3d_part_id")
@@ -53,6 +101,10 @@ def _glb_mesh_stats(gltf: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(position, dict) and isinstance(position.get("min"), list) and isinstance(position.get("max"), list):
                     values_min = [float(value) for value in position["min"][:3]]
                     values_max = [float(value) for value in position["max"][:3]]
+                    corners = [[x, y, z] for x in (values_min[0], values_max[0]) for y in (values_min[1], values_max[1]) for z in (values_min[2], values_max[2])]
+                    transformed = [_transform_point(matrix, corner) for corner in corners]
+                    values_min = [min(point[index] for point in transformed) for index in range(3)]
+                    values_max = [max(point[index] for point in transformed) for index in range(3)]
                     mins = values_min if mins is None else [min(left, right) for left, right in zip(mins, values_min)]
                     maxs = values_max if maxs is None else [max(left, right) for left, right in zip(maxs, values_max)]
             index = primitive.get("indices")
@@ -62,6 +114,10 @@ def _glb_mesh_stats(gltf: dict[str, Any]) -> dict[str, Any]:
                 triangles += int(accessors[position_index].get("count", 0)) // 3
     bounds = None
     if mins is not None and maxs is not None:
+        generator = str(gltf.get("asset", {}).get("generator", "")).lower()
+        if "blender" in generator:
+            # Blender exports Z-up scenes as glTF Y-up: x, -z, y is Open3D's x, y, z.
+            mins, maxs = [mins[0], -maxs[2], mins[1]], [maxs[0], -mins[2], maxs[1]]
         bounds = {"min": mins, "max": maxs, "size": [maxs[index] - mins[index] for index in range(3)]}
     return {"triangles": triangles, "parts": sorted(parts), "bounds": bounds}
 

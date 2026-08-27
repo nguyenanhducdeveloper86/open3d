@@ -375,7 +375,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     worker: Any | None = None,
                     reference_image: dict[str, Any] | None = None,
                     target_asset_id: str | None = None,
-                    referenced_asset_ids: list[str] | None = None) -> dict[str, Any]:
+                    referenced_asset_ids: list[str] | None = None,
+                    create_asset: bool = False) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
@@ -384,6 +385,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         raise ProjectError(f"prompt must be non-empty and no larger than {MAX_BUILD_PROMPT} bytes")
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_BUILD_TIMEOUT:
         raise ProjectError(f"timeout must be between 0 and {MAX_BUILD_TIMEOUT} seconds")
+    if not isinstance(create_asset, bool):
+        raise ProjectError("create_asset must be a boolean")
     if referenced_asset_ids is not None and (not isinstance(referenced_asset_ids, list) or len(referenced_asset_ids) > MAX_REFERENCED_ASSETS):
         raise ProjectError(f"referenced_asset_ids must be a list of at most {MAX_REFERENCED_ASSETS} assets")
     requested_reference_ids = []
@@ -443,7 +446,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         referenced_assets.append({"asset_id": catalog_asset["asset_id"], "name": catalog_asset.get("name"), "kind": catalog_asset.get("kind"), "contract": catalog_asset["contract"]})
     if referenced_assets:
         (workspace / "referenced_assets.json").write_text(json.dumps(referenced_assets, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets]}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "target_asset_id": None if create_asset else target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets], "create_asset": create_asset}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None, "referenced_assets.json" if referenced_assets else None)
     completed = None
     try:
@@ -460,6 +463,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         "schema_version": "0.1.0", "agent": agent, "run": str(run_dir.relative_to(project_path)),
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
         "reference_image": staged_reference,
+        "create_asset": create_asset,
         "pool": pool,
         "cli": {"status": cli_status, "reason": cli_reason, "executable": executable, "stdout": stdout, "stderr": stderr,
                 "exit_status": getattr(completed, "returncode", None)},
@@ -482,6 +486,10 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
 
     try:
         asset = load_asset(workspace / "asset.json")
+        if not create_asset and target_asset_id and asset["asset_id"] != target_asset_id:
+            result = {**common, "status": "FAILED", "reason": "TARGET_ASSET_MISMATCH", "error": f"Agent returned {asset['asset_id']} but the edit target is {target_asset_id}", "blender": blender_result}
+            (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
         glb_path, blend_path = output / "asset.glb", output / "scene.blend"
         if glb_path.stat().st_size > 512 * 1024 * 1024 or blend_path.stat().st_size > 1024 * 1024 * 1024:
             raise ProjectError("agent build artifact is too large")
