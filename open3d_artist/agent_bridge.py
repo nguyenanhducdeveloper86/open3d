@@ -17,6 +17,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .contracts import digest_json, load_asset
 from .project import Project, ProjectError
+from .providers import All2ApiVisualJudge, ProviderError
 from .reference import validate_reference_spec
 
 MAX_OUTPUT = 16 * 1024
@@ -28,15 +29,16 @@ MAX_BUILD_PROMPT = 16 * 1024
 # request body remains bounded separately by the local server.
 MAX_REFERENCE_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_REFERENCED_ASSETS = 16
-AGENTS = ("codex", "claude", "opencode")
+AGENTS = ("codex", "claude", "opencode", "agy")
 POOL_URL_ENV = "OPEN3D_AGENT_POOL_URL"
 POOL_TOKEN_ENV = "OPEN3D_AGENT_POOL_TOKEN"
 POOL_MODEL_ENV = "OPEN3D_AGENT_POOL_MODEL"
 OPENCODE_MODEL_ENV = "OPEN3D_OPENCODE_MODEL"
+AGY_AGENT_ENV = "OPEN3D_AGY_AGENT"
 
 
 def _agent_label(agent: str) -> str:
-    return {"codex": "Codex", "claude": "Claude Code", "opencode": "OpenCode"}.get(agent, agent)
+    return {"codex": "Codex", "claude": "Claude Code", "opencode": "OpenCode", "agy": "Agy Agent"}.get(agent, agent)
 
 
 def _bounded(value: bytes | str) -> str:
@@ -53,7 +55,12 @@ def _pool_config() -> dict[str, str]:
 
 
 def _opencode_model() -> str:
-    return os.environ.get(OPENCODE_MODEL_ENV, "").strip()
+    # A stale global OpenCode config must not select an expired model.
+    return os.environ.get(OPENCODE_MODEL_ENV, "").strip() or "opencode/big-pickle"
+
+
+def _agy_agent() -> str:
+    return os.environ.get(AGY_AGENT_ENV, "").strip() or "Claude Sonnet 4.6 (Thinking)"
 
 
 def _safe_url(value: str) -> str:
@@ -131,6 +138,9 @@ def _auth_probe(agent: str, executable: str, *, runner: Callable[..., Any]) -> d
         "codex": [executable, "login", "status"],
         "claude": [executable, "auth", "status", "--json"],
         "opencode": [executable, "auth", "list"],
+        # Agy has no local auth-status command. A read-only smoke request is
+        # the only truthful way to distinguish CLI-ready from usable.
+        "agy": [executable, "--print-timeout", "10s", "--agent", _agy_agent(), "--mode", "plan", "--print", "Reply exactly OPEN3D_AUTH_OK. Do not edit files."],
     }[agent]
     try:
         result = runner(command, cwd=os.getcwd(), input=b"", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -139,7 +149,7 @@ def _auth_probe(agent: str, executable: str, *, runner: Callable[..., Any]) -> d
         return {"status": "AUTH_REQUIRED", "reason": "AUTH_CHECK_FAILED"}
     output = _bounded((getattr(result, "stdout", b"") or getattr(result, "stderr", b"")) or b"").strip()
     if getattr(result, "returncode", 1) != 0:
-        return {"status": "AUTH_REQUIRED", "reason": "AUTH_CHECK_FAILED"}
+        return {"status": "AUTH_REQUIRED", "reason": _cli_failure_reason(result)}
     lowered = output.lower()
     authenticated = False
     if agent == "codex":
@@ -149,8 +159,10 @@ def _auth_probe(agent: str, executable: str, *, runner: Callable[..., Any]) -> d
             authenticated = bool(json.loads(output).get("loggedIn"))
         except (json.JSONDecodeError, AttributeError):
             authenticated = "loggedin" in lowered and "true" in lowered
-    else:
+    elif agent == "opencode":
         authenticated = "credentials" in lowered and "0 credentials" not in lowered
+    else:
+        authenticated = "open3d_auth_ok" in lowered or "agy_ready" in lowered
     return {"status": "ACTIVE" if authenticated else "AUTH_REQUIRED", "reason": "AUTHENTICATED" if authenticated else "AUTH_REQUIRED"}
 
 
@@ -217,6 +229,10 @@ def _run_agent_command(agent: str, executable: str, prompt: str, *, cwd: Path, t
             command.extend(["--model", _opencode_model()])
         command.append(prompt)
         input_value = b""
+    elif agent == "agy":
+        command = [executable, "--print-timeout", f"{max(1, int(timeout))}s", "--agent", _agy_agent(),
+                   "--mode", "accept-edits" if build else "plan", "--add-dir", str(cwd), "--print", prompt]
+        input_value = b""
     else:
         command = _agent_command(agent, executable, build=build, cwd=cwd)
         pool = _pool_config()
@@ -268,7 +284,7 @@ def run_agent_plan(agent: str, prompt: str, project: str | Path, *, timeout: flo
                    runner: Callable[..., Any] = subprocess.run,
     which: Callable[[str], str | None] = shutil.which) -> dict[str, Any]:
     if agent not in AGENTS:
-        raise ProjectError("agent must be codex, claude, or opencode")
+        raise ProjectError(f"agent must be one of {', '.join(AGENTS)}")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode("utf-8")) > MAX_PLAN_PROMPT:
         raise ProjectError(f"prompt must be non-empty and no larger than {MAX_PLAN_PROMPT} bytes")
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_TIMEOUT:
@@ -370,11 +386,15 @@ Build rules:
 - Target the installed Blender 5.2 LTS: use `scene.render.engine = 'BLENDER_EEVEE'` (or a try/except fallback to `BLENDER_EEVEE_NEXT`/Workbench), not enum introspection through bpy.types.
 - Keep the model inside the contract dimensions and triangle budget. For a new asset request, treat current_asset.json as context only: choose dimensions that bound the final model with a small margin instead of reusing unrelated dimensions. For an edit request, preserve existing dimensions unless the user asks to resize. Prefer separate editable semantic parts and production-quality bevels/materials when the prompt requests them.
 - Design like a Blender artist, not like a box assembler. Work from primary silhouette to secondary construction to tertiary surface cues. Every visible hard edge needs a reason: use support geometry, restrained bevels, weighted normals, and selective smooth shading; use profile curves, cylinders, subdivision, or loop-based forms for anything round, inflated, bent, or organic. Add transition surfaces where forms meet so there are no paper-thin intersections, floating rods, coincident faces, or arbitrary detail strips.
+- Organic-character rule: build soft forms as connected volume. Use UV/ico spheres with subdivision or metaball-like overlap for the body, head, cheeks, muzzle, paws, and cloud tufts; use Bezier/NURBS curves with bevel and taper for a thick curled tail; use actual rounded ear and face geometry. Add contact/transition volumes, smooth shading, and controlled support loops. Never substitute boxes, faceted wedges, thin cylinders, flat decals, or floating blobs for a cloud creature's primary forms.
+- For a cloud fox/cat mascot, make the silhouette readable at game distance: compact inflated body, large rounded head and cheeks, rounded pointed ears, four weight-bearing paws, connected cloud tufts, and a thick tapered tail that visibly curls in a loop. Keep the soft cream/cyan material breakup secondary to the geometry; color alone never counts as form detail.
+- Cloudvale repair constraints for this run: use one broad skull with shallow cheek/muzzle transitions rather than separate cheek balls; make the tail one continuous thick curved form with an integrated root and a real taper rather than a chain of spheres; make cloud markings shallow tangent geometry or material breakup that hugs the base surface rather than pasted bubble clusters. Preserve smooth organic transitions while staying below the contract triangle budget and initialize a world before assigning world properties.
 - Required modeling passes: blockout proportions; structural construction and contact points; form refinement with curvature/edge-radius hierarchy; material separation with real Principled values; surface breakup with UVs and readable grain/seams/fasteners; lighting and three-quarter inspection; interaction-safe semantic parts; final optimization. Do not call a flat color plus a few cubes a production asset.
 - Production-detail bar: model the reference's recognizable silhouette and major secondary forms. For architectural props, this normally means a clean roof with two planes/ridge/eaves (no dangling or floating roof bars), wall/cladding and trim, door slab/frame/hardware, window glass/frames/mullions, chimney masonry/cap/flue, foundation/plinth/stone breakup, and porch/treads/rails when present. Use material separation, real bevels, smooth/weighted shading, and enough form transitions to make these details readable at game-view distance.
 - Mark genuinely curved parts with `open3d_smooth = True`; create UV maps for every exported semantic mesh. Keep bevel widths proportional to the part instead of using one global oversized radius. The fixed Open3D Blender design pass will add a conservative bevel/normal/UV/render pass after this script, so leave geometry editable and do not fake its evidence with custom properties alone.
 - Before finishing, inspect the generated scene from a three-quarter view and remove accidental intersections, detached geometry, oversized rods, duplicate subjects, hidden placeholder blocks, and details that extend beyond the intended silhouette. Do not call a generic box with a few strips production quality.
 - Do not claim success in text unless asset.json, build.py, asset.glb, and scene.blend are actually present.
+- Mark any presentation-only ground, camera, target, or light with \`open3d_preview_only = True\`; Open3D excludes those helpers from the exported asset and fixed QA studio render.
 
 The file current_asset.json contains the current asset contract. If previous_build.py exists, use it as the editable source for an edit request. Preserve existing semantic part IDs where possible and change only what the user asked for. You may replace the previous build with a better one, but write the two required files before finishing."""
 
@@ -382,7 +402,9 @@ The file current_asset.json contains the current asset contract. If previous_bui
 def _cli_failure_reason(completed: Any) -> str:
     output = _bounded(getattr(completed, "stdout", b"") or b"") + "\n" + _bounded(getattr(completed, "stderr", b"") or b"")
     lowered = output.lower()
-    if any(marker in lowered for marker in ("not logged in", "authentication", "unauthorized", "api key", "login required", '"loggedin": false')):
+    if any(marker in lowered for marker in ("verification required", "not eligible for antigravity", "verify your account")):
+        return "AGY_VERIFICATION_REQUIRED"
+    if any(marker in lowered for marker in ("not logged in", "authentication", "unauthorized", "api key", "login required", '"loggedin": false', "verification required", "not eligible", "verify your account", "signing in")):
         return "AUTH_REQUIRED"
     return "CLI_FAILED"
 
@@ -425,11 +447,12 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                     referenced_asset_ids: list[str] | None = None,
                     create_asset: bool = False,
                     quality_profile: str | None = None,
-                    reference_pipeline: str | None = None) -> dict[str, Any]:
+                    reference_pipeline: str | None = None,
+                    retry_run: str | Path | None = None) -> dict[str, Any]:
     """Let an external agent author a Blender build, then execute and adopt it."""
 
     if agent not in AGENTS:
-        raise ProjectError("agent must be codex, claude, or opencode")
+        raise ProjectError(f"agent must be one of {', '.join(AGENTS)}")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode("utf-8")) > MAX_BUILD_PROMPT:
         raise ProjectError(f"prompt must be non-empty and no larger than {MAX_BUILD_PROMPT} bytes")
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_BUILD_TIMEOUT:
@@ -442,6 +465,8 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         raise ProjectError("reference_pipeline must be img2threejs or null")
     if reference_pipeline == "img2threejs" and reference_image is None:
         raise ProjectError("img2threejs reference pipeline requires reference_image")
+    if retry_run is not None and not isinstance(retry_run, (str, Path)):
+        raise ProjectError("retry_run must be a path")
     if referenced_asset_ids is not None and (not isinstance(referenced_asset_ids, list) or len(referenced_asset_ids) > MAX_REFERENCED_ASSETS):
         raise ProjectError(f"referenced_asset_ids must be a list of at most {MAX_REFERENCED_ASSETS} assets")
     requested_reference_ids = []
@@ -478,13 +503,13 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
     current_ref = project_obj.current()
     target_ref = current_ref
     target_asset = project_obj.load_current_asset()
-    if target_asset_id and target_asset_id != current_ref.get("asset_id"):
+    if target_asset_id and not create_asset and target_asset_id != current_ref.get("asset_id"):
         catalog_asset = project_obj.workspace_asset(target_asset_id)
         target_ref = {**current_ref, **{key: catalog_asset[key] for key in ("asset_id", "contract_artifact", "glb_artifact", "qa_artifact", "qa_status", "geometry_source", "agent_build") if key in catalog_asset}}
         target_asset = project_obj.store.read_json(catalog_asset["contract_artifact"])
     (workspace / "current_asset.json").write_text(json.dumps(target_asset, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     previous_workspace = target_ref.get("agent_build", {}).get("workspace") if isinstance(target_ref.get("agent_build"), dict) else None
-    if isinstance(previous_workspace, str):
+    if not create_asset and isinstance(previous_workspace, str):
         previous_path = (project_path / previous_workspace).resolve()
         try:
             previous_path.relative_to(project_path)
@@ -495,13 +520,29 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
                 source = previous_path / source_name
                 if source.is_file() and not source.is_symlink():
                     shutil.copy2(source, workspace / target_name)
+    if retry_run is not None:
+        raw_retry = Path(retry_run).expanduser()
+        retry_candidate = project_path / raw_retry if not raw_retry.is_absolute() else raw_retry
+        if raw_retry.is_symlink() or retry_candidate.is_symlink() or not retry_candidate.is_dir():
+            raise ProjectError("retry run must be a real directory")
+        retry_path = retry_candidate.resolve()
+        try:
+            retry_path.relative_to((project_path / ".open3d" / "agent-runs").resolve())
+        except ValueError as exc:
+            raise ProjectError("retry run must stay inside .open3d/agent-runs") from exc
+        retry_workspace = retry_path / "workspace"
+        if retry_workspace.is_dir() and not retry_workspace.is_symlink():
+            for source_name, target_name in (("asset.json", "previous_asset.json"), ("build.py", "previous_build.py")):
+                source = retry_workspace / source_name
+                if source.is_file() and not source.is_symlink():
+                    shutil.copy2(source, workspace / target_name)
     referenced_assets = []
     for asset_id in requested_reference_ids:
         catalog_asset = project_obj.workspace_asset(asset_id)
         referenced_assets.append({"asset_id": catalog_asset["asset_id"], "name": catalog_asset.get("name"), "kind": catalog_asset.get("kind"), "contract": catalog_asset["contract"]})
     if referenced_assets:
         (workspace / "referenced_assets.json").write_text(json.dumps(referenced_assets, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "reference_pipeline": reference_pipeline, "target_asset_id": None if create_asset else target_asset_id or current_ref.get("asset_id"), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets], "create_asset": create_asset}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (workspace / "request.json").write_text(json.dumps({"schema_version": "0.1.0", "agent": agent, "prompt": prompt.strip(), "reference_image": staged_reference, "reference_pipeline": reference_pipeline, "target_asset_id": target_asset_id or (None if create_asset else current_ref.get("asset_id")), "referenced_asset_ids": [asset["asset_id"] for asset in referenced_assets], "create_asset": create_asset, "retry_run": str(retry_run) if retry_run is not None else None}, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     instruction = _agent_build_instruction(prompt, staged_reference["path"] if staged_reference else None, "referenced_assets.json" if referenced_assets else None, reference_pipeline)
     completed = None
     try:
@@ -519,6 +560,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         "workspace": str(workspace.relative_to(project_path)), "prompt": prompt.strip(),
         "reference_image": staged_reference,
         "reference_pipeline": reference_pipeline,
+        "retry_run": str(retry_run) if retry_run is not None else None,
         "create_asset": create_asset,
         "quality_profile": quality_profile,
         "pool": pool,
@@ -567,16 +609,32 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
             (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
             return result
 
+    visual_judge = None
+    if quality_profile == "production" and reference_pipeline == "img2threejs":
+        try:
+            hero_view = pipeline_receipt["views"]["HERO_3Q"]
+            hero_path = output / hero_view.get("visual_qa", {}).get("path", hero_view["path"])
+            reference_path = workspace / staged_reference["path"]
+            visual_judge = All2ApiVisualJudge().judge(reference_path, hero_path, asset_id=staged_asset["asset_id"], timeout=float(timeout))
+        except (OSError, ProviderError, ValueError) as exc:
+            result = {**common, "status": "FAILED", "reason": "VISUAL_QA_UNAVAILABLE", "error": str(exc), "blender": blender_result, "reference_spec": reference_spec}
+            (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
+        if visual_judge["status"] != "PASS":
+            result = {**common, "status": "FAILED", "reason": "VISUAL_QA_REPAIR_REQUIRED", "visual_judge": visual_judge, "blender": blender_result, "reference_spec": reference_spec}
+            (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            return result
+
     try:
         asset = staged_asset
-        if not create_asset and target_asset_id and asset["asset_id"] != target_asset_id:
-            result = {**common, "status": "FAILED", "reason": "TARGET_ASSET_MISMATCH", "error": f"Agent returned {asset['asset_id']} but the edit target is {target_asset_id}", "blender": blender_result}
+        if target_asset_id and asset["asset_id"] != target_asset_id:
+            result = {**common, "status": "FAILED", "reason": "TARGET_ASSET_MISMATCH", "error": f"Agent returned {asset['asset_id']} but the requested asset is {target_asset_id}", "blender": blender_result}
             (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
             return result
         glb_path, blend_path = output / "asset.glb", output / "scene.blend"
         if glb_path.stat().st_size > 512 * 1024 * 1024 or blend_path.stat().st_size > 1024 * 1024 * 1024:
             raise ProjectError("agent build artifact is too large")
-        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile, reference_pipeline=reference_pipeline, reference_spec_digest=reference_spec.get("digest") if reference_spec else None, pipeline_receipt=pipeline_receipt, preview_renders=preview_renders)
+        adopted = project_obj.replace_generated_asset(asset, glb_path.read_bytes(), blend=blend_path.read_bytes(), agent=agent, prompt=prompt.strip(), run_id=run_dir.name, workspace=str(workspace.relative_to(project_path)), auto_fit_dimensions=True, quality_profile=quality_profile, reference_pipeline=reference_pipeline, reference_spec_digest=reference_spec.get("digest") if reference_spec else None, pipeline_receipt=pipeline_receipt, preview_renders=preview_renders, visual_judge=visual_judge)
     except (OSError, ValueError, ProjectError) as exc:
         result = {**common, "status": "FAILED", "reason": "OUTPUT_REJECTED", "error": str(exc), "blender": blender_result}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -585,7 +643,7 @@ def run_agent_build(agent: str, prompt: str, project: str | Path, *, timeout: fl
         result = {**common, "status": "FAILED", "reason": "QA_REJECTED", "report": adopted.get("report"), "blender": blender_result, "reference_spec": reference_spec}
         (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return result
-    result = {**common, "status": "PASS", "reason": "BLENDER_BUILD_COMPLETE", "blender": blender_result, "reference_spec": reference_spec,
+    result = {**common, "status": "PASS", "reason": "BLENDER_BUILD_COMPLETE", "blender": blender_result, "reference_spec": reference_spec, "visual_judge": visual_judge,
               "mutation": adopted, "project_state_unchanged": False, "ended_at": time.time()}
     (run_dir / "agent_build_receipt.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return result
@@ -595,7 +653,7 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
                          timeout: float = 30, runner: Callable[..., Any] = subprocess.run,
                          which: Callable[[str], str | None] = shutil.which) -> dict[str, Any]:
     if agent not in AGENTS:
-        raise ProjectError("agent must be codex, claude, or opencode")
+        raise ProjectError(f"agent must be one of {', '.join(AGENTS)}")
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > MAX_TIMEOUT:
         raise ProjectError(f"timeout must be between 0 and {MAX_TIMEOUT} seconds")
     raw_run_path = Path(run).expanduser()
@@ -631,8 +689,10 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
     elif agent == "claude":
         argv = ["claude", "-p", "--no-session-persistence", "--permission-mode", "plan",
                 "--disallowed-tools", "Edit,Write,NotebookEdit,Bash", "--output-format", "json"]
-    else:
+    elif agent == "opencode":
         argv = ["opencode", "run", "--dir", str(run_path), "--format", "default", "--auto"]
+    else:
+        argv = ["agy", "--print-timeout", f"{max(1, int(timeout))}s", "--agent", _agy_agent(), "--mode", "plan", "--add-dir", str(run_path), "--print"]
     command = [executable, *argv[1:]] if executable else [agent, *argv[1:]]
     if agent == "opencode" and not _pool_config()["url"] and _opencode_model():
         command.extend(["--model", _opencode_model()])
@@ -652,14 +712,14 @@ def run_production_agent(agent: str, run: str | Path, *, output_root: str | Path
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
                                 env={"PATH": os.path.dirname(executable), "LANG": "C", "LC_ALL": "C"}, check=False)
         version = _bounded(getattr(version_result, "stdout", b"") or getattr(version_result, "stderr", b"") or b"").strip()
-        if agent == "opencode":
+        if agent in ("opencode", "agy"):
             completed = runner(command + [prompt], cwd=str(run_path), input=b"", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 timeout=float(timeout), env=_agent_environment(agent, executable, build=False), check=False)
         else:
             completed = _run_command(command, prompt=prompt, cwd=run_path, timeout=float(timeout), runner=runner,
                                      environment=_agent_environment(agent, executable, build=False))
         status = "FAILED" if completed.returncode != 0 else "UNAVAILABLE"
-        reason = "CLI_FAILED" if completed.returncode != 0 else "STRUCTURED_RECEIPT_MISSING"
+        reason = _cli_failure_reason(completed) if completed.returncode != 0 else "STRUCTURED_RECEIPT_MISSING"
     except subprocess.TimeoutExpired as exc:
         status, reason = "FAILED", "CLI_TIMEOUT"
         completed = exc

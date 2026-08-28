@@ -520,7 +520,8 @@ class Project:
                                 reference_pipeline: str | None = None,
                                 reference_spec_digest: str | None = None,
                                 pipeline_receipt: dict[str, Any] | None = None,
-                                preview_renders: dict[str, bytes] | None = None) -> dict[str, Any]:
+                                preview_renders: dict[str, bytes] | None = None,
+                                visual_judge: dict[str, Any] | None = None) -> dict[str, Any]:
         """Adopt a generated asset after contract and GLB validation."""
 
         candidate = normalize_asset(asset)
@@ -547,6 +548,7 @@ class Project:
         qa_id = self.store.put_json({**report, "artifact_id": glb_id}, kind="qa-report", metadata={"asset_id": candidate["asset_id"], "input_artifact_id": glb_id})
         blend_id = self.store.put_bytes(blend, kind="blend", metadata={"asset_id": candidate["asset_id"], "source": "blender-agent"}) if blend is not None else None
         pipeline_id = self.store.put_json(pipeline_receipt, kind="blender-pipeline-receipt", metadata={"asset_id": candidate["asset_id"], "source": source}) if pipeline_receipt is not None else None
+        visual_judge_id = self.store.put_json(visual_judge, kind="visual-qa-receipt", metadata={"asset_id": candidate["asset_id"], "source": source}) if visual_judge is not None else None
         preview_ids: dict[str, str] = {}
         for view, data in (preview_renders or {}).items():
             if view not in {"HERO_3Q", "FRONT", "BACK", "LEFT", "RIGHT", "TOP"} or not isinstance(data, bytes) or not data:
@@ -563,6 +565,8 @@ class Project:
             agent_build["reference_spec_digest"] = reference_spec_digest
         if pipeline_id:
             agent_build["pipeline_receipt"] = pipeline_id
+        if visual_judge_id:
+            agent_build["visual_judge"] = visual_judge_id
         if preview_ids:
             agent_build["preview_renders"] = preview_ids
         next_ref = {

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .agent_bridge import agent_catalog, agent_pool_status, run_agent_build, run_agent_plan
+from .agent_bridge import AGENTS, agent_catalog, agent_pool_status, run_agent_build, run_agent_plan
 from .project import Project, ProjectError
 from .production import REQUIRED_VIEWS, production_agent_receipt, production_state, promote_production, repair_production, run_production, verify_release
 from .providers import All2ApiImageGenerator, ConsentRequired, MeshyImageTo3D, MeshyPipeline, ProviderError, provider_catalog
@@ -21,6 +21,12 @@ from .workers import BlenderSandbox, WorkerError, WorkerUnavailable
 
 # Four compressed multi-view references plus the JSON envelope stay bounded.
 MAX_BODY = 4 * 1024 * 1024
+MAX_VISUAL_BUILD_ATTEMPTS = 3
+
+
+def _visual_repair_prompt(judge: dict[str, Any]) -> str:
+    evidence = {key: judge.get(key, []) for key in ("mismatched_components", "next_actions", "repair_components", "freeze_components")}
+    return "\n\nTARGETED VISUAL REPAIR PASS: keep the frozen/matched components unchanged. Repair the following reference mismatches in Blender geometry and rerun the full pipeline; do not solve them with color-only edits, flat decals, or metadata claims:\n" + json.dumps(evidence, ensure_ascii=False, sort_keys=True)[:7000]
 
 
 class Open3DHTTPServer(ThreadingHTTPServer):
@@ -155,12 +161,40 @@ class _Handler(BaseHTTPRequestHandler):
                     if body.get("consent") is not True:
                         raise ConsentRequired("remote image generation requires explicit consent")
                     agent = body["agent"]
-                    if agent not in {"codex", "claude", "opencode"}:
-                        raise ProjectError("agent must be codex, claude, or opencode")
+                    if agent not in AGENTS:
+                        raise ProjectError(f"agent must be one of {', '.join(AGENTS)}")
                     asset_id = body["asset_id"]
-                    prompt = f"Create a new asset with asset_id {asset_id}. {body['prompt']}"
-                    reference = All2ApiImageGenerator().generate(prompt=prompt, quality=body.get("quality", "high"), timeout=min(float(body.get("timeout", 900)), 900))
-                    value = run_agent_build(agent, prompt, self.server.project.root, timeout=min(float(body.get("timeout", 900)), 900), reference_image=reference, reference_pipeline="img2threejs", create_asset=True, quality_profile="production")
+                    user_prompt = body.get("prompt")
+                    if not isinstance(user_prompt, str) or not user_prompt.strip():
+                        raise ProjectError("prompt is required")
+                    prompt = f"Create a new asset with asset_id {asset_id}. {user_prompt.strip()}"
+                    reference_prompt = f"Independent concept reference for a Cloudvale production 3D asset {asset_id}: {user_prompt.strip()}. Show one centered full-body three-quarter character/object on a clean studio background. Prefer softcrafted organic volumes, rounded transitions, broad curves, and readable silhouette; no text, UI, watermark, or extra subjects."
+                    build_timeout = min(float(body.get("timeout", 900)), 900)
+                    supplied_reference = body.get("reference_image")
+                    if supplied_reference is not None and not isinstance(supplied_reference, dict):
+                        raise ProjectError("reference_image must be an object")
+                    reference = supplied_reference or All2ApiImageGenerator().generate(prompt=reference_prompt, quality=body.get("quality", "high"), timeout=build_timeout)
+                    attempts = []
+                    value = None
+                    attempt_prompt = prompt
+                    retry_run = None
+                    for attempt in range(1, MAX_VISUAL_BUILD_ATTEMPTS + 1):
+                        value = run_agent_build(agent, attempt_prompt, self.server.project.root, timeout=build_timeout, reference_image=reference, reference_pipeline="img2threejs", target_asset_id=asset_id, create_asset=True, quality_profile="production", retry_run=retry_run)
+                        visual = value.get("visual_judge") if isinstance(value, dict) else None
+                        attempts.append({"attempt": attempt, "run": value.get("run"), "status": value.get("status"), "reason": value.get("reason"), "similarity_percent": visual.get("similarity_percent") if isinstance(visual, dict) else None})
+                        reason = value.get("reason")
+                        if value.get("status") == "PASS" or reason not in {"VISUAL_QA_REPAIR_REQUIRED", "BLENDER_BUILD_FAILED", "BLENDER_PIPELINE_REJECTED", "CONTRACT_REJECTED", "REFERENCE_SPEC_REJECTED", "BUILD_FILES_MISSING"}:
+                            break
+                        retry_run = value.get("run")
+                        if reason == "VISUAL_QA_REPAIR_REQUIRED":
+                            attempt_prompt = prompt + _visual_repair_prompt(visual if isinstance(visual, dict) else {})
+                        else:
+                            pipeline_error = value.get("blender", {}).get("pipeline", {}).get("result", {}).get("error", "") if isinstance(value.get("blender"), dict) else ""
+                            failure_evidence = value.get("error") or pipeline_error or value.get("reason") or "unknown build failure"
+                            attempt_prompt = prompt + "\n\nTECHNICAL REPAIR PASS: inspect previous_build.py and fix the contract/reference/Blender failure before changing style. Ensure asset.json has the exact required schema, `outputs` is an object, reference_spec.json targets the requested asset_id, and build.py emits asset.glb and scene.blend. Keep every organic form smooth and connected, but reduce authored geometry to stay within the contract triangle budget; use fewer segments/subdivision levels and never decimate away the silhouette. Failure evidence: " + str(failure_evidence)[:3000]
+                    if value is None:
+                        raise ProjectError("All2API agent loop produced no result")
+                    value["visual_loop"] = {"threshold_percent": 85, "max_attempts": MAX_VISUAL_BUILD_ATTEMPTS, "attempts": attempts, "status": "PASS" if value.get("status") == "PASS" else "REPAIR_REQUIRED"}
                     value["generation"] = {key: item for key, item in reference.items() if key != "data"}
                     if value.get("status") == "PASS":
                         current = value.get("mutation", {}).get("current", {})

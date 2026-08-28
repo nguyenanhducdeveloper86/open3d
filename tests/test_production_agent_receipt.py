@@ -200,6 +200,19 @@ class ProductionAgentReceiptTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASS")
             self.assertIn("nvidia/minimaxai/minimax-m3", fake.calls[0])
 
+    def test_agy_plan_uses_external_agent_mode_and_workspace(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"OPEN3D_AGY_AGENT": "GPT-OSS 120B (Medium)"}, clear=False):
+            root = Path(directory); (root / ".open3d").mkdir()
+            fake = FakeRunner("read-only plan")
+            result = run_agent_plan("agy", "inspect semantic parts", root, runner=fake, which=lambda _: "/bin/agy")
+            self.assertEqual(result["status"], "PASS")
+            command = fake.calls[0]
+            self.assertIn("--mode", command)
+            self.assertIn("plan", command)
+            self.assertIn("--add-dir", command)
+            self.assertIn(str(root), command)
+            self.assertIn("GPT-OSS 120B (Medium)", command)
+
     def test_fixed_read_only_bridge_writes_digest_linked_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); receipt = completed_run(root)
@@ -238,11 +251,13 @@ class ProductionAgentReceiptTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=b"Logged in using ChatGPT\n", stderr=b"")
             if argv[1:4] == ["auth", "status", "--json"]:
                 return SimpleNamespace(returncode=0, stdout=b'{"loggedIn":true}\n', stderr=b"")
+            if "--agent" in argv:
+                return SimpleNamespace(returncode=0, stdout=b"OPEN3D_AUTH_OK\n", stderr=b"")
             return SimpleNamespace(returncode=0, stdout=b"Credentials\n2 credentials\n", stderr=b"")
 
         with patch.dict(os.environ, {}, clear=True):
             agents = agent_catalog(runner=runner, which=lambda agent: f"/bin/{agent}")
-        self.assertEqual([agent["agent_id"] for agent in agents], ["codex", "claude", "opencode"])
+        self.assertEqual([agent["agent_id"] for agent in agents], ["codex", "claude", "opencode", "agy"])
         self.assertTrue(all(agent["status"] == "ACTIVE" and agent["execution"] == "READY" for agent in agents))
 
     def test_shared_pool_is_authenticated_without_echoing_token(self):

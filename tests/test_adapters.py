@@ -7,7 +7,7 @@ import base64
 from pathlib import Path
 
 from open3d_artist.geometry import generate_glb
-from open3d_artist.providers import All2ApiImageGenerator, ConsentRequired, MeshyImageTo3D, MeshyPipeline, OpenAICompatibleImageGenerator
+from open3d_artist.providers import All2ApiImageGenerator, All2ApiVisualJudge, ConsentRequired, MeshyImageTo3D, MeshyPipeline, OpenAICompatibleImageGenerator
 from open3d_artist.project import Project
 from open3d_artist.unity import UnityValidator
 from open3d_artist.workers import BlenderSandbox, WorkerUnavailable, run_limited
@@ -164,6 +164,36 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual(result["provider"], "all2api-image")
             self.assertTrue(result["data"].startswith("data:image/png;base64,"))
             self.assertEqual(len(calls), 3)
+
+    def test_all2api_visual_judge_requires_eighty_five_and_preserves_attachment_order(self):
+        png = b"\x89PNG\r\n\x1a\nvisual-qa-fixture"
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory) / "reference.png"
+            candidate = Path(directory) / "candidate.png"
+            reference.write_bytes(png)
+            candidate.write_bytes(png)
+            calls = []
+            score = 84
+
+            def opener(request, timeout=0):
+                nonlocal score
+                calls.append((request.method, request.full_url, json.loads(request.data.decode()) if request.data else None))
+                if request.method == "GET":
+                    return Response({"ok": True, "status": "done"})
+                return Response({"jobId": "judge-1", "status": "done", "text": json.dumps({"similarity_percent": score, "scores": {"silhouette": score}})})
+
+            judge = All2ApiVisualJudge(base_url="http://all2api.test", opener=opener)
+            result = judge.judge(reference, candidate, asset_id="CRE-CLOUD-FOX-001", timeout=10)
+            self.assertEqual(result["status"], "REPAIR_REQUIRED")
+            self.assertFalse(result["commit_allowed"])
+            score = 85
+            result = judge.judge(reference, candidate, asset_id="CRE-CLOUD-FOX-001", timeout=10)
+            self.assertEqual(result["status"], "PASS")
+            self.assertTrue(result["commit_allowed"])
+            payload = calls[1][2]
+            self.assertEqual(payload["mode"], "text")
+            self.assertEqual(payload["model"], "Thinking")
+            self.assertEqual(payload["filePaths"], [str(reference.resolve()), str(candidate.resolve())])
 
 
 if __name__ == "__main__":

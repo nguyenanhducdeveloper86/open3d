@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from .agent_bridge import run_agent_build
+from .agent_bridge import AGENTS, run_agent_build
 from .mcp import serve_stdio
 from .providers import MeshyImageTo3D, MeshyPipeline, ProviderError, provider_catalog
 from .production import promote_production, production_agent_receipt, repair_production, run_production, verify_release
@@ -113,14 +113,14 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("--project", required=True, type=Path)
     release = commands.add_parser("production-release-verify", help="verify promoted release artifacts")
     release.add_argument("project", type=Path)
-    agent = commands.add_parser("production-agent-receipt", help="record a read-only Codex or Claude run receipt")
-    agent.add_argument("--agent", choices=("codex", "claude", "opencode"), required=True)
+    agent = commands.add_parser("production-agent-receipt", help="record a read-only external agent run receipt")
+    agent.add_argument("--agent", choices=AGENTS, required=True)
     agent.add_argument("--run", required=True, type=Path)
     agent.add_argument("--output-root", type=Path)
     agent.add_argument("--timeout", type=float, default=30)
     build = commands.add_parser("agent-build", help="let an agent author and run a Blender asset build")
     build.add_argument("project", type=Path)
-    build.add_argument("--agent", choices=("codex", "claude", "opencode"), required=True)
+    build.add_argument("--agent", choices=AGENTS, required=True)
     build.add_argument("--prompt", required=True)
     build.add_argument("--timeout", type=float, default=900)
     return parser

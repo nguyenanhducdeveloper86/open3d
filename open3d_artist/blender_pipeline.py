@@ -275,7 +275,7 @@ def _material(name: str, color: tuple[float, float, float, float], roughness: fl
     return material
 
 
-def _preview_setup(objects: list, mins: list[float], maxs: list[float], size: list[float]):
+def _preview_setup(objects: list, mins: list[float], maxs: list[float], size: list[float], *, studio_profile: str = "dark"):
     import bpy  # type: ignore
     from mathutils import Vector  # type: ignore
 
@@ -288,7 +288,11 @@ def _preview_setup(objects: list, mins: list[float], maxs: list[float], size: li
     ground = bpy.context.object
     ground.name = "OPEN3D_PREVIEW_GROUND"
     ground["open3d_preview_only"] = True
-    ground.data.materials.append(_material("Open3D Preview Ground", (0.018, 0.026, 0.023, 1.0), 0.92))
+    # Character references use a seamless warm studio rather than the prop
+    # workbench. Keep the ground/world close enough that the horizon does not
+    # become a false silhouette cue during visual comparison.
+    ground_color = (0.16, 0.13, 0.12, 1.0) if studio_profile == "warm-neutral" else (0.018, 0.026, 0.023, 1.0)
+    ground.data.materials.append(_material("Open3D Preview Ground", ground_color, 0.92))
 
     camera_data = bpy.data.cameras.new("Open3D Preview Camera")
     camera = bpy.data.objects.new("OPEN3D_PREVIEW_CAMERA", camera_data)
@@ -318,8 +322,8 @@ def _preview_setup(objects: list, mins: list[float], maxs: list[float], size: li
     world.use_nodes = True
     background = world.node_tree.nodes.get("Background")
     if background:
-        background.inputs["Color"].default_value = (0.012, 0.018, 0.016, 1.0)
-        background.inputs["Strength"].default_value = 0.32
+        background.inputs["Color"].default_value = (0.36, 0.30, 0.27, 1.0) if studio_profile == "warm-neutral" else (0.012, 0.018, 0.016, 1.0)
+        background.inputs["Strength"].default_value = 0.45 if studio_profile == "warm-neutral" else 0.32
     for engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"):
         try:
             scene.render.engine = engine
@@ -334,7 +338,7 @@ def _preview_setup(objects: list, mins: list[float], maxs: list[float], size: li
     return camera, center, radius
 
 
-def _render_views(output: Path, camera, target, radius: float) -> dict:
+def _render_views(output: Path, camera, target, radius: float, authored_camera=None) -> dict:
     import bpy  # type: ignore
     from mathutils import Vector  # type: ignore
 
@@ -350,9 +354,19 @@ def _render_views(output: Path, camera, target, radius: float) -> dict:
     scene = bpy.context.scene
     render_dir = output / "renders"
     render_dir.mkdir(parents=True, exist_ok=True)
+    authored_offset = authored_camera.location - target if authored_camera is not None else None
+    authored_lens = float(authored_camera.data.lens) if authored_camera is not None else None
     for view in VIEWS:
-        camera.location = target + Vector(tuple(value * radius for value in offsets[view]))
-        _look_at(camera, target)
+        if view == "HERO_3Q" and authored_offset is not None and authored_offset.length > 0.001:
+            # Keep the agent's view direction, but normalize distance so a
+            # poorly framed authored camera cannot hide the asset from QA.
+            camera.location = target + authored_offset.normalized() * (radius * 2.65)
+            _look_at(camera, target)
+            if authored_lens is not None:
+                camera.data.lens = min(max(authored_lens, 35.0), 85.0)
+        else:
+            camera.location = target + Vector(tuple(value * radius for value in offsets[view]))
+            _look_at(camera, target)
         path = render_dir / f"{view}.png"
         scene.render.filepath = str(path)
         bpy.ops.render.render(write_still=True)
@@ -363,6 +377,28 @@ def _render_views(output: Path, camera, target, radius: float) -> dict:
         if visual_sanity["status"] != "PASS":
             raise ValueError(f"render has unexpected dimensions: {view}")
         renders[view] = {"path": str(path.relative_to(output)), "bytes": path.stat().st_size, "status": "PASS", "visual_sanity": visual_sanity}
+    # Keep the workspace preview square, but give the external visual judge a
+    # landscape hero matching the common concept-reference framing.
+    hero = renders["HERO_3Q"]
+    qa_target = target + Vector((0.0, 0.0, radius * 0.10))
+    if authored_offset is not None and authored_offset.length > 0.001:
+        camera.location = qa_target + authored_offset.normalized() * (radius * 3.20)
+        _look_at(camera, qa_target)
+        if authored_lens is not None:
+            camera.data.lens = min(max(authored_lens, 35.0), 85.0)
+    else:
+        camera.location = qa_target + Vector(tuple(value * radius for value in offsets["HERO_3Q"]))
+        _look_at(camera, qa_target)
+    scene.render.resolution_x = 1200
+    scene.render.resolution_y = 900
+    qa_path = render_dir / "HERO_3Q_QA.png"
+    scene.render.filepath = str(qa_path)
+    bpy.ops.render.render(write_still=True)
+    if not qa_path.is_file() or qa_path.stat().st_size == 0:
+        raise ValueError("render missing: HERO_3Q_QA")
+    hero["visual_qa"] = {"path": str(qa_path.relative_to(output)), "bytes": qa_path.stat().st_size, "status": "PASS", "dimensions": {"width": 1200, "height": 900}}
+    scene.render.resolution_x = 640
+    scene.render.resolution_y = 640
     return renders
 
 
@@ -424,8 +460,10 @@ def run(args: argparse.Namespace) -> int:
     texture = _surface_texture_pass(objects, output)
     if texture["failures"]:
         raise ValueError("surface texture pass failed: " + "; ".join(item["material"] for item in texture["failures"][:4]))
-    camera, target, radius = _preview_setup(objects, mins, maxs, size)
-    renders = _render_views(output, camera, target, radius)
+    authored_camera = scene.camera if scene.camera and scene.camera.type == "CAMERA" and not scene.camera.get("open3d_preview_only") else None
+    studio_profile = "warm-neutral" if contract.get("kind") == "character" else "dark"
+    camera, target, radius = _preview_setup(objects, mins, maxs, size, studio_profile=studio_profile)
+    renders = _render_views(output, camera, target, radius, authored_camera=authored_camera)
     triangles = _evaluated_triangles(objects)
     budget = int(contract.get("geometry", {}).get("triangle_budget", {}).get("max", 100000))
     if triangles > budget:
@@ -450,7 +488,7 @@ def run(args: argparse.Namespace) -> int:
         "views": renders,
         "render_contract": {"width": 640, "height": 640, "required_views": list(VIEWS)},
         "form_language": {"edge_softness": "bevel", "curved_shading": "selective-smooth", "normal_strategy": "weighted-normal-when-available"},
-        "visual_review": {"status": "LOCAL_RENDER_SANITY_PASS", "reference_comparison": "pending_external_reference_review", "not_claimed": True},
+        "visual_review": {"status": "LOCAL_RENDER_SANITY_PASS", "reference_comparison": "pending_external_reference_review", "hero_camera": "agent-authored" if authored_camera is not None else "normalized", "studio_profile": studio_profile, "not_claimed": True},
     }
     _write(output / "pipeline.json", receipt)
     return 0

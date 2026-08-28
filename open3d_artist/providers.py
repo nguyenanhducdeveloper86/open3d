@@ -336,6 +336,112 @@ class All2ApiImageGenerator:
         return {"provider": "all2api-image", "tool": self.tool, "model": model, "job_id": result.get("jobId"), "saved_path": str(image_path), "mime_type": mime_type, "data": data}
 
 
+ALL2API_VISUAL_THRESHOLD = 85
+
+
+class All2ApiVisualJudge(All2ApiImageGenerator):
+    """Ask the connected ChatGPT worker to compare a reference and a render."""
+
+    def _attachment(self, value: str | Path) -> Path:
+        raw = Path(value).expanduser()
+        if raw.is_symlink() or not raw.is_file():
+            raise ProviderError("visual QA attachment must be a real file")
+        path = raw.resolve()
+        size = path.stat().st_size
+        if size <= 16 or size > 16 * 1024 * 1024:
+            raise ProviderError("visual QA attachment is empty or too large")
+        with path.open("rb") as handle:
+            signature = handle.read(12)
+        if not (signature.startswith(b"\x89PNG\r\n\x1a\n") or signature.startswith(b"\xff\xd8\xff") or (signature.startswith(b"RIFF") and signature[8:12] == b"WEBP")):
+            raise ProviderError("visual QA attachment is not a supported image")
+        return path
+
+    @staticmethod
+    def _response_text(value: dict[str, Any]) -> str:
+        text = value.get("text") or value.get("output") or value.get("message")
+        if isinstance(text, str):
+            return text
+        if isinstance(text, list):
+            return "\n".join(item.get("text", "") for item in text if isinstance(item, dict) and isinstance(item.get("text"), str))
+        return ""
+
+    @staticmethod
+    def _json_result(text: str) -> dict[str, Any] | None:
+        decoder = json.JSONDecoder()
+        for start, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(text[start:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return value
+        return None
+
+    def judge(self, reference_path: str | Path, candidate_path: str | Path, *, asset_id: str, timeout: float = 900) -> dict[str, Any]:
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise ProviderError("visual QA asset_id is required")
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ProviderError("visual QA timeout must be positive")
+        reference = self._attachment(reference_path)
+        candidate = self._attachment(candidate_path)
+        prompt = (
+            f"You are a strict production visual QA judge for Cloudvale 3D assets. Compare attachment 1 (REFERENCE) against attachment 2 (CANDIDATE_HERO_3Q) for asset {asset_id}. Judge geometry, form and construction, not merely color or rendering polish. The reference may use stylized low-poly facets; do not penalize smooth shading by itself when the silhouette and forms match. The candidate must be a softcrafted, game-ready cloud fox with one continuous inflated head/skull and shallow cheek/muzzle transitions, rounded pointed ears, thick paws, connected cloud tufts, and one thick tapered curled tail whose root is integrated into the body. Penalize boxes, cylinders used as limbs, sharp faceting that changes the silhouette, thin rods, bead-like tail segments, flat decals, separate cheek balls, floating pieces, and missing contact transitions. Color markings are secondary and cannot compensate for wrong geometry. "
+            f"Score these weighted components and sum them to similarity_percent: silhouette 20, proportions 20, major_forms 15, placement 15, construction 10, material_blocks 10, surface_softness 5, cloudvale_readability 5. PASS is allowed only when the computed similarity_percent is >= {ALL2API_VISUAL_THRESHOLD}; otherwise use REPAIR. Compute the score from the two images, do not copy a sample value, and do not default to zero. Include at most three short geometry repairs in mismatched_components and next_actions; include at most three matched form names in freeze_components. Return exactly one compact JSON object on one line, no markdown, no explanation, and no extra keys, using this shape with computed values: {{\"similarity_percent\": SCORE,\"mismatched_components\":[\"...\"],\"next_actions\":[\"...\"],\"freeze_components\":[\"...\"]}}."
+        )
+        health = self._request("GET", "/api/health", timeout=5)
+        if health.get("ok") is False:
+            raise ProviderError("All2API visual judge health check failed")
+        # Each comparison gets a fresh bridge conversation. Reusing the same
+        # ChatGPT tab can otherwise return the previous judge's JSON.
+        payload = {"tool": "chatgpt", "mode": "text", "model": "Thinking", "inlineOnly": True, "prompt": prompt, "filePaths": [str(reference), str(candidate)], "chatgptFreshSessionKey": f"open3d-visual-qa-{asset_id}-{uuid.uuid4().hex}"}
+        deadline = time.monotonic() + float(timeout)
+        result = None
+        parsed = None
+        raw_text = ""
+        score_value = None
+        for judge_attempt in range(1, 4):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProviderError("All2API visual judge timed out")
+            result = self._request("POST", "/api/generate-sync", payload, timeout=min(max(remaining, 5), 95))
+            while str(result.get("status", "")).lower() in {"preparing", "pending", "running"}:
+                job_id = result.get("jobId")
+                if not isinstance(job_id, str) or not job_id:
+                    raise ProviderError("All2API visual judge returned a running job without a job id")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ProviderError("All2API visual judge timed out")
+                wait_ms = min(60_000, max(1_000, int(remaining * 1000)))
+                result = self._request("GET", f"/api/result/{quote(job_id, safe='')}?waitMs={wait_ms}", timeout=min(65, remaining + 5))
+            status = str(result.get("status", "")).lower()
+            if status in {"error", "failed"} or result.get("error"):
+                raise ProviderError(f"All2API visual judge failed: {result.get('error') or status}")
+            raw_text = self._response_text(result)[:16 * 1024]
+            parsed = self._json_result(raw_text)
+            score_value = parsed.get("similarity_percent") if parsed else None
+            if score_value is None and parsed:
+                score_value = parsed.get("score")
+            if not isinstance(score_value, bool) and isinstance(score_value, (int, float)) and math.isfinite(float(score_value)) and 0 <= float(score_value) <= 100:
+                break
+            if judge_attempt == 3:
+                raise ProviderError("All2API visual judge returned no valid similarity_percent")
+        assert result is not None
+        score = round(float(score_value), 2)
+        passed = score >= ALL2API_VISUAL_THRESHOLD
+        return {
+            "provider": "all2api-chatgpt", "model": "Thinking", "job_id": result.get("jobId"), "asset_id": asset_id,
+            "attachment_order": ["REFERENCE", "CANDIDATE_HERO_3Q"], "reference_path": str(reference), "candidate_path": str(candidate),
+            "similarity_percent": score, "score": score, "target_percent": ALL2API_VISUAL_THRESHOLD,
+            "status": "PASS" if passed else "REPAIR_REQUIRED", "match_status": "PASS" if passed else "REPAIR_REQUIRED", "commit_allowed": passed,
+            "judge_attempts": judge_attempt, "scores": parsed.get("scores", {}) if parsed else {}, "matched_components": parsed.get("matched_components", []) if parsed else [],
+            "mismatched_components": parsed.get("mismatched_components", []) if parsed else [], "next_actions": parsed.get("next_actions", []) if parsed else [],
+            "freeze_components": parsed.get("freeze_components", []) if parsed else [], "repair_components": parsed.get("repair_components", []) if parsed else [],
+            "repair": parsed.get("repair") if parsed else None, "recommended_action": parsed.get("recommended_action") if parsed else None, "evidence_status": parsed.get("evidence_status", "COMPLETE") if parsed else "INCOMPLETE", "raw": raw_text,
+        }
+
+
 class CodexCliImageGenerator:
     """Use the bundled imagegen CLI explicitly; Codex CLI itself is image-input only."""
 

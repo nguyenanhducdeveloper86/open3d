@@ -39,7 +39,7 @@ python -m open3d_artist validate examples/watering-can
 python -m open3d_artist inspect examples/watering-can
 python -m open3d_artist edit-part examples/watering-can spout --scale-x 1.2
 python -m open3d_artist export examples/watering-can /tmp/watering-can.glb
-# Agent-authored Blender build (requires Codex/Claude Code/OpenCode and Blender)
+# Agent-authored Blender build (requires Codex/Claude Code/OpenCode/Agy and Blender)
 python -m open3d_artist agent-build examples/watering-can --agent codex --prompt "Build a stylized Scandinavian timber house"
 # Meshy text-to-3D: preview -> refine -> PBR/4K GLB -> contract/QA/version
 python -m open3d_artist meshy-generate examples/watering-can --asset-id PROP-SCANDI-HOUSE-001 --prompt "Production-quality stylized Scandinavian timber house" --quality high --consent
@@ -53,7 +53,7 @@ npm run build --prefix web
 python -m open3d_artist serve examples/watering-can
 ```
 
-Open `http://127.0.0.1:8289` for the desktop viewer. The viewer reads the current GLB artifact, supports semantic picking and checkpointed edits, and sends build prompts only to authenticated Codex, Claude Code, or OpenCode agents.
+Open `http://127.0.0.1:8289` for the desktop viewer. The viewer reads the current GLB artifact, supports semantic picking and checkpointed edits, and sends build prompts only to authenticated Codex, Claude Code, OpenCode, or Agy agents.
 
 The example `asset.yaml` uses JSON syntax, which is valid YAML 1.2, so the core has no runtime dependency. For normal YAML authoring install `pip install -e '.[yaml]'`.
 
@@ -71,7 +71,7 @@ python -m open3d_artist serve examples/watering-can
 
 Open3D probes `${OPEN3D_AGENT_POOL_URL}/v1/models`; a failed pool probe blocks every agent instead of silently switching to direct credentials. Leave the pool variables unset to use each CLI's own authenticated session.
 
-If OpenCode's saved config points to an unavailable model, set `OPEN3D_OPENCODE_MODEL` to a model available to that OpenCode credential; this override is ignored when the shared pool is configured.
+If OpenCode's saved config points to an unavailable model, set `OPEN3D_OPENCODE_MODEL` to a model available to that OpenCode credential; this override is ignored when the shared pool is configured. Agy uses `Claude Sonnet 4.6 (Thinking)` by default; set `OPEN3D_AGY_AGENT` to one of the names returned by `agy agents` to select another external agent. Agy must pass its own account eligibility check before Open3D marks it active.
 
 ## Repository map
 

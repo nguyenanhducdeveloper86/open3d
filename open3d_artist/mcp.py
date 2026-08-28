@@ -34,7 +34,7 @@ def _tools() -> list[dict[str, Any]]:
         _tool("production.repair", "Run the one fixed geometry-changing local repair.", {"run": {"type": "string"}, "repair_id": {"type": "string", "enum": [REPAIR_ID]}}, ["run", "repair_id"]),
         _tool("production.release_verify", "Verify promoted production artifacts and release proof.", {}, []),
         _tool("production.agent_receipt", "Run a fixed read-only agent review and record evidence.", {"agent": {"type": "string", "enum": list(AGENTS)}, "run": {"type": "string"}, "output_root": {"type": "string"}}, ["agent", "run"]),
-        _tool("agent.build", "Let Codex, Claude Code, or OpenCode author asset.json/build.py, then run the build in the Blender sandbox and adopt a passing GLB.", {"agent": {"type": "string", "enum": list(AGENTS)}, "prompt": {"type": "string", "maxLength": 16384}, "timeout": {"type": "number", "exclusiveMinimum": 0}}, ["agent", "prompt"]),
+        _tool("agent.build", "Let an authenticated external agent author asset.json/build.py, then run the build in the Blender sandbox and adopt a passing GLB.", {"agent": {"type": "string", "enum": list(AGENTS)}, "prompt": {"type": "string", "maxLength": 16384}, "timeout": {"type": "number", "exclusiveMinimum": 0}}, ["agent", "prompt"]),
     ]
 
 

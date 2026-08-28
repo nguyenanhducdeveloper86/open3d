@@ -300,6 +300,7 @@ class BlenderSandbox:
         if sandbox_kind == "bubblewrap":
             script_arg = f"/project/{script_path.relative_to(self.root)}"
             contract_arg = f"/project/{contract_path.relative_to(self.root)}"
+            script_dir_arg = str(Path(script_arg).parent)
             command = [self.bwrap, "--die-with-parent", "--unshare-net"]
             for runtime_path in (Path("/usr"), Path("/lib"), Path("/lib64"), Path("/bin"), Path("/etc"), Path("/opt")):
                 if runtime_path.exists():
@@ -308,21 +309,33 @@ class BlenderSandbox:
                 "--ro-bind", str(self.root), "/project", "--bind", str(output_path), "/output",
                 "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/project",
                 str(self._blender_path()), *self._blender_flags(),
+                "--python-expr", f"import sys; sys.path.insert(0, {script_dir_arg!r})",
                 "--python", script_arg, "--", "--contract", contract_arg, "--output", "/output",
             ])
         elif sandbox_kind == "macos-sandbox":
             profile = self._macos_profile(script_path.parent, output_path)
             command = [
                 self.sandbox_exec, "-p", profile, str(self._blender_path()),
-                *self._blender_flags(), "--python", str(script_path),
+                *self._blender_flags(), "--python-expr", f"import sys; sys.path.insert(0, {str(script_path.parent)!r})",
+                "--python", str(script_path),
                 "--", "--contract", str(contract_path), "--output", str(output_path),
             ]
         else:
             command = [
                 str(self._blender_path()), *self._blender_flags(),
+                "--python-expr", f"import sys; sys.path.insert(0, {str(script_path.parent)!r})",
                 "--python", str(script_path), "--", "--contract", str(contract_path), "--output", str(output_path),
             ]
-        clean_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(output_path), "TMPDIR": "/tmp", "LANG": "C.UTF-8"}
+        clean_env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(output_path),
+            "TMPDIR": "/tmp",
+            "LANG": "C.UTF-8",
+            # Blender does not always add an absolute --python script's
+            # directory to sys.path; agent entrypoints may import a staged
+            # previous_build.py from the same workspace.
+            "PYTHONPATH": str(script_path.parent),
+        }
         result = run_limited(command, cwd=self.root, timeout=timeout, env=clean_env)
         status = result.status if result.status != "PASS" else ("PASS" if result.returncode == 0 else "FAIL")
         response: dict[str, Any] = {

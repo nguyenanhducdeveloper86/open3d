@@ -25,6 +25,7 @@ const state = {
     { agent_id: "codex", label: "Codex", status: "CHECKING" },
     { agent_id: "claude", label: "Claude Code", status: "CHECKING" },
     { agent_id: "opencode", label: "OpenCode", status: "CHECKING" },
+    { agent_id: "agy", label: "Agy Agent", status: "CHECKING" },
   ],
   agentPool: { mode: "DIRECT_CLI", status: "CHECKING" },
   production: null,
@@ -55,7 +56,7 @@ const state = {
   annotationMode: false,
   annotation: null,
   build: { status: "idle", agent: "", startedAt: 0 },
-  agentMessages: [{ role: "agent", text: "Choose Codex, Claude Code, or OpenCode. Open3D then runs Blender and QA. No local agent fallback." }],
+  agentMessages: [{ role: "agent", text: "Choose Codex, Claude Code, OpenCode, or Agy Agent. Open3D then runs Blender and QA. No local agent fallback." }],
 };
 
 const app = document.querySelector("#app");
@@ -99,7 +100,7 @@ app.innerHTML = `
             <div class="create-preview-asset"><small>ASSET ID</small><strong id="create-preview-id">PROP-SCANDI-HOUSE-001</strong></div>
             <div class="create-preview-prompt"><small>PROMPT PREVIEW</small><p id="create-preview-prompt">${escapeHtml(state.assetDraft?.prompt || DEFAULT_HOUSE_PROMPT)}</p><small>REFERENCE</small><p id="create-preview-reference">${escapeHtml(state.assetDraft?.reference?.path || "No reference attached")}</p></div>
             <ol class="create-flow" aria-label="Build pipeline"><li class="done"><span>01</span><div><b>Brief</b><small>Prompt + reference</small></div></li><li><span>02</span><div><b id="create-flow-step-two">Generator</b><small id="create-preview-agent">External agent</small></div></li><li><span>03</span><div><b id="create-flow-step-three">Build + quality</b><small id="create-flow-step-three-copy">Blender build, export GLB</small></div></li><li><span>04</span><div><b>QA gate</b><small>Contract + artifact checks</small></div></li></ol>
-            <div class="create-agent-card"><div class="create-card-label">WHO BUILDS IT</div><div class="brief-agent"><label><span>EXTERNAL LLM</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div></div>
+            <div class="create-agent-card"><div class="create-card-label">WHO BUILDS IT</div><div class="brief-agent"><label><span>EXTERNAL LLM</span><select id="create-agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option><option value="agy">Agy Agent</option></select></label><span id="create-agent-status" class="agent-provider-status">Checking</span></div></div>
             <div class="view-contract"><div><span>REQUIRED OUTPUT</span><b>Six-view contract</b></div><div class="view-tags">${REQUIRED_VIEWS.map((view) => `<span>${view}</span>`).join("")}</div></div>
             <div class="form-boundary" id="create-boundary"><i class="ph ph-shield-check"></i><p>Remote generation requires explicit consent. Keys stay in the local runtime; Open3D never uses a local-agent fallback.</p></div>
           </aside>
@@ -114,7 +115,7 @@ app.innerHTML = `
       <header class="agent-header"><div><div class="eyebrow">LLM AGENTS</div><h2 id="agent-title">Asset build chat</h2><p id="agent-context">Select a part to give the agent a target.</p></div><button class="icon-button" id="close-agent" type="button" aria-label="Collapse agent chat" title="Collapse agent chat"><i class="ph ph-caret-right"></i></button></header>
       <div class="agent-policy"><i class="ph ph-shield-check"></i><span>External LLM → Blender sandbox → GLB + QA. No local agent fallback.</span></div>
       <section class="build-state" id="agent-build-state" hidden aria-live="polite"><div class="build-state-header"><span class="build-state-pulse"></span><div><b>BUILD IN PROGRESS</b><small id="build-state-detail">External LLM is authoring the staged build</small></div><time id="build-state-elapsed">00:00</time></div><div class="build-progress" aria-hidden="true"><span></span></div><p><i class="ph ph-lock-key"></i>Request locked. Keep this window open or close it safely; the build continues and duplicate runs are blocked.</p></section>
-      <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
+      <div class="agent-controls"><label><span>LLM EXECUTION</span><select id="agent-provider"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="opencode">OpenCode</option><option value="agy">Agy Agent</option></select></label><span class="agent-provider-status" id="agent-provider-status">Checking</span><span class="agent-provider-status" id="agent-pool-status">POOL CHECKING</span><button class="quiet-button agent-refresh" id="refresh-agents" type="button" title="Check LLM agents" aria-label="Check LLM agents"><i class="ph ph-arrows-clockwise"></i></button></div>
       <section class="agent-activity"><div class="activity-heading"><span>ACTION TRACE</span><button class="quiet-button" id="clear-actions" type="button">Clear</button></div><div id="agent-activity-list"><div class="activity-empty">No actions yet.</div></div></section>
       <div class="agent-thread" id="agent-thread" aria-live="polite"></div>
       <form class="agent-composer" id="agent-form"><div class="agent-mention-bar" id="agent-mentions" aria-live="polite"><span class="agent-mention-placeholder"><i class="ph ph-at"></i>Drop an asset here or type @asset</span></div><textarea id="agent-input" rows="2" placeholder="Try: build a production-quality Scandinavian timber house"></textarea><div class="agent-attachment" id="agent-attachment" hidden><i class="ph ph-image-square"></i><span id="agent-attachment-name"></span><button class="icon-button" type="button" id="agent-attachment-remove" aria-label="Remove attached reference"><i class="ph ph-x"></i></button></div><div><label class="agent-attach-button" for="agent-reference-file"><i class="ph ph-paperclip"></i>Reference<input id="agent-reference-file" type="file" accept="image/png,image/jpeg,image/webp" /></label><span id="agent-composer-note">LLM agent → Blender → QA</span><button class="primary-action compact" type="submit"><i class="ph ph-arrow-up-right"></i>Run build</button></div></form>
@@ -159,6 +160,13 @@ function qaCheckText(check) {
 
 function qaTriangles(report = state.report) {
   return report?.checks?.find((check) => check.check_id === "geometry.triangle_budget")?.actual?.triangles ?? "-";
+}
+
+function visualQaSummary(result) {
+  const score = result?.visual_judge?.similarity_percent ?? result?.visual_loop?.attempts?.at(-1)?.similarity_percent;
+  const attempts = result?.visual_loop?.attempts?.length;
+  if (score == null && !attempts) return "";
+  return [score == null ? "Visual score pending" : `Visual ${score}/100 (gate ≥85)`, attempts > 1 ? `${attempts} attempts` : ""].filter(Boolean).join(" · ");
 }
 
 function escapeRegExp(value) {
@@ -277,7 +285,7 @@ function renderAgentProviderStatus() {
 }
 
 async function refreshAgents() {
-  const actionId = beginAction("Check LLM agents", "Checking Codex, Claude Code, and OpenCode authentication");
+  const actionId = beginAction("Check LLM agents", "Checking Codex, Claude Code, OpenCode, and Agy authentication");
   updateAction(actionId, "running", "Checking external LLM execution");
   try {
     [state.agents, state.agentPool] = await Promise.all([api("/api/agents"), api("/api/agent-pool")]);
@@ -285,7 +293,7 @@ async function refreshAgents() {
     syncCreateAgent();
     const ready = state.agents.filter((agent) => agent.status === "ACTIVE").map((agent) => agent.label).join(", ");
     updateAction(actionId, "done", ready ? `${ready} active` : "No authenticated LLM agent");
-    addAgentMessage("agent", ready ? `${ready} active · ${state.agentPool?.status === "ACTIVE" ? "shared pool" : "direct CLI auth"}.` : "No authenticated external LLM agent. The build button is blocked until Codex, Claude Code, or OpenCode is authenticated.");
+    addAgentMessage("agent", ready ? `${ready} active · ${state.agentPool?.status === "ACTIVE" ? "shared pool" : "direct CLI auth"}.` : "No authenticated external LLM agent. The build button is blocked until Codex, Claude Code, OpenCode, or Agy is authenticated.");
   } catch (error) {
     updateAction(actionId, "failed", error.message);
     addAgentMessage("agent", `Agent adapter check failed: ${error.message}`);
@@ -791,14 +799,15 @@ async function executeAgentBuild(text, options = {}) {
     }
     const result = await api("/api/agent/build", { method: "POST", body: JSON.stringify(request) });
     const failedChecks = result.report?.checks?.filter((check) => check.status !== "PASS").map((check) => `${check.check_id}: ${qaCheckText(check)}`).join("\n") || "";
-    const output = [result.error, result.reason, failedChecks && `QA failures:\n${failedChecks}`, result.cli?.stderr, result.cli?.stdout].filter(Boolean).join("\n\n").slice(0, 6000) || "No build output";
+    const visualSummary = visualQaSummary(result);
+    const output = [result.error, result.reason, visualSummary, failedChecks && `QA failures:\n${failedChecks}`, result.cli?.stderr, result.cli?.stdout].filter(Boolean).join("\n\n").slice(0, 6000) || "No build output";
     if (result.status === "PASS") {
       updateAction(actionId, "running", `Blender finished · QA ${result.mutation?.report?.status || "checking"}`);
       await refreshAfterMutation();
       state.agentCreateAssetId = null;
       renderAgentTarget();
-      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
-      addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the sandbox"}; the GLB, contract, checkpoint, and QA report are now current.`);
+      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}${visualSummary ? ` · ${visualSummary}` : ""}`);
+      addAgentMessage("agent", `${label} built the asset successfully. Blender ran in ${result.blender?.sandbox || "the sandbox"}; the GLB, contract, checkpoint, and QA report are now current.${visualSummary ? ` ${visualSummary}.` : ""}`);
       toast("LLM Blender build completed", "success");
     } else {
       updateAction(actionId, "failed", result.reason || "Agent build failed");
@@ -860,14 +869,15 @@ async function generateAssetFromBrief() {
     if (spawn) request.spawn = spawn;
     const result = await api(all2apiAgent ? "/api/generation/all2api-agent" : "/api/generation/meshy", { method: "POST", body: JSON.stringify(request) });
     const failedChecks = result.mutation?.report?.checks?.filter((check) => check.status !== "PASS").map((check) => `${check.check_id}: ${qaCheckText(check)}`).join("\n") || "";
-    const output = [result.error, result.reason, failedChecks && `QA failures:\n${failedChecks}`].filter(Boolean).join("\n\n").slice(0, 6000) || "No generation output";
+    const visualSummary = visualQaSummary(result);
+    const output = [result.error, result.reason, visualSummary, failedChecks && `QA failures:\n${failedChecks}`].filter(Boolean).join("\n\n").slice(0, 6000) || "No generation output";
     if (result.status === "PASS") {
       updateAction(actionId, "running", "GLB verified · refreshing preview and version history");
       await refreshAfterMutation();
       state.agentCreateAssetId = null;
       renderAgentTarget();
-      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}`);
-      addAgentMessage("agent", `${label} completed. The new GLB, semantic contract, QA report, and asset version are current in the workspace.`);
+      updateAction(actionId, "done", `GLB adopted · QA ${result.mutation?.report?.status || "PASS"}${visualSummary ? ` · ${visualSummary}` : ""}`);
+      addAgentMessage("agent", `${label} completed. The new GLB, semantic contract, QA report, and asset version are current in the workspace.${visualSummary ? ` ${visualSummary}.` : ""}`);
       toast("High-quality 3D generation completed", "success");
     } else {
       updateAction(actionId, "failed", result.reason || "Generation failed");
